@@ -3,8 +3,7 @@
 本 repository 的 Issue 與規格統一存放於 GitHub Issues。所有 Issue 操作
 使用 `gh` CLI。
 
-本 repository 目前尚未設定 GitHub remote。在 remote 設定完成前，應將
-GitHub 操作回報為受阻，不得自行改用其他 Issue 追蹤方式。
+Repository：`https://github.com/Command1264/agent-skills`
 
 ## 操作慣例
 
@@ -16,8 +15,8 @@ GitHub 操作回報為受阻，不得自行改用其他 Issue 追蹤方式。
 - 移除 label：`gh issue edit <number> --remove-label "..."`
 - 關閉：`gh issue close <number> --comment "..."`
 
-GitHub remote 設定完成後，應在 repository 內執行以上命令，讓 `gh`
-自動判斷目標 repository。
+優先在 repository 內執行以上命令，讓 `gh` 自動判斷目標 repository；若在
+其他目錄操作，必須明確指定 `--repo Command1264/agent-skills`。
 
 ## Pull Request 是否納入 triage
 
