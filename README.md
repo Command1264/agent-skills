@@ -11,7 +11,7 @@ Repository foundation 已建立，尚未發布可穩定安裝的 Skill。
 
 | Skill | 用途 | 狀態 |
 | --- | --- | --- |
-| `google-routes` | 封裝 Google Routes API，輸出穩定 JSON | 規劃完成，尚未實作 |
+| `google-routes` | 封裝 Google Routes API，輸出穩定 JSON | v1 開發中，尚未發布 |
 | `commute-analyzer` | 以一週未來樣本估算住家與公司的通勤時間 | 規劃完成，尚未實作 |
 
 正式發布後，README 才會加入經 CI 與實機 smoke test 驗證的安裝命令。一般安裝

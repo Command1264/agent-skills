@@ -1,0 +1,23 @@
+{
+  "skill_name": "google-routes",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "幫我查明天早上 8 點，從我提供的起點 Place ID 開車到目的地 Place ID 的預測時間與距離。",
+      "expected_output": "先確認明確時區與位置，顯示一筆 DRIVE request 預覽，再透過 CLI 取得 summary；不得揭露 API key 或 Google raw response。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "我有三組明確的起終點與未來時間，請批次比較機車路線；其中一筆失敗也要保留其他結果。",
+      "expected_output": "建立三筆 TWO_WHEELER request，以 request_id 對應結果，保留 partial_success、warnings 與 fallback，並清楚標示失敗項目。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "幫我算下個月每週一到週五從家到公司的平均通勤時間，並把每月總通勤時間估出來。",
+      "expected_output": "辨識為通勤排程與統計需求，轉用 commute-analyzer，而不是直接用 google-routes 承擔日期展開與平均計算。",
+      "files": []
+    }
+  ]
+}
