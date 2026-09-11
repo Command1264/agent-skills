@@ -18,8 +18,10 @@
   提供 route、warnings、fallback 與地址解析後的 Place ID；adapter 只保留 summary
   contract 所需欄位。
 - [Usage and billing](https://developers.google.com/maps/documentation/routes/usage-and-billing)
-  目前列出的 Compute Routes provider 上限為 3,000 QPM，且 traffic-aware request
-  會依 Google 當時 SKU 計費。Skill 的預設 60 QPM 是保守的本機上限。
+  目前列出的 Compute Routes provider 上限為 3,000 QPM；`TRAFFIC_AWARE` 與
+  `TRAFFIC_AWARE_OPTIMAL` 會使用 Pro SKU，`TWO_WHEELER` 會使用 Enterprise SKU。
+  Skill 的預設 60 QPM 是保守的本機上限，實際費用與 project quota 仍以 Google
+  Cloud Console 為準。
 - [API key security](https://developers.google.com/maps/api-security-best-practices)
   建議 key 同時採 API restriction 與適用的 application restriction，並放在 source tree
   之外。
