@@ -300,6 +300,22 @@ class RetryAndBatchTests(unittest.TestCase):
         self.assertEqual(len(transport.calls), 3)
         self.assertEqual(output["results"][0]["error"]["http_status"], 503)
 
+    def test_zero_retry_mode_hard_caps_one_attempt_per_item(self) -> None:
+        transport = FakeTransport(
+            [google_routes.HttpResponse(503, {}, {})]
+        )
+
+        output, exit_code = google_routes.execute_batch(
+            batch(),
+            api_key="test-key-not-a-real-secret",
+            transport=transport,
+            max_retries=0,
+        )
+
+        self.assertEqual(exit_code, 4)
+        self.assertEqual(len(transport.calls), 1)
+        self.assertEqual(output["results"][0]["attempts"], 1)
+
 
 class ExampleTests(unittest.TestCase):
     def test_query_example_matches_runtime_contract(self) -> None:

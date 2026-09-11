@@ -43,7 +43,11 @@ def run(argv: list[str] | None = None) -> int:
     if not api_key:
         print("拒絕執行：尚未設定 GOOGLE_MAPS_API_KEY。", file=sys.stderr)
         return 2
-    result, exit_code = google_routes.execute_batch(validated, api_key=api_key)
+    # The release smoke authorization is a hard cap on actual HTTP calls, so each
+    # selected mode gets exactly one attempt even though normal queries retry.
+    result, exit_code = google_routes.execute_batch(
+        validated, api_key=api_key, max_retries=0
+    )
     evidence = {
         "schema_version": google_routes.SCHEMA_VERSION,
         "smoke_test": {

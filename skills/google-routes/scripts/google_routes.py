@@ -255,16 +255,21 @@ def execute_batch(
     transport: Transport | None = None,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
+    max_retries: int = MAX_RETRIES,
 ) -> tuple[dict[str, object], int]:
     validated = validate_batch(payload)
     if not api_key:
         raise InputError("$environment.GOOGLE_MAPS_API_KEY", "尚未設定")
+    if isinstance(max_retries, bool) or not isinstance(max_retries, int):
+        raise ValueError("max_retries 必須是 0 到 2 的整數")
+    if not 0 <= max_retries <= MAX_RETRIES:
+        raise ValueError("max_retries 必須是 0 到 2 的整數")
     adapter = transport or UrllibTransport()
     limiter = RateLimiter(
         int(validated["rate_limit_qpm"]), sleep=sleep, monotonic=monotonic
     )
     results = [
-        _execute_one(item, api_key, adapter, limiter, sleep)
+        _execute_one(item, api_key, adapter, limiter, sleep, max_retries)
         for item in validated["requests"]
     ]
     statuses = {str(result["status"]) for result in results}
@@ -294,6 +299,7 @@ def _execute_one(
     transport: Transport,
     limiter: RateLimiter,
     sleep: Callable[[float], None],
+    max_retries: int,
 ) -> dict[str, object]:
     headers = {
         "Content-Type": "application/json; charset=utf-8",
@@ -303,7 +309,7 @@ def _execute_one(
     provider_request = build_provider_request(item)
     attempts = 0
     last_error: dict[str, object] | None = None
-    while attempts <= MAX_RETRIES:
+    while attempts <= max_retries:
         attempts += 1
         limiter.wait()
         try:
@@ -316,7 +322,7 @@ def _execute_one(
                 "message": "無法連線至 Google Routes API",
                 "retryable": True,
             }
-            if attempts <= MAX_RETRIES:
+            if attempts <= max_retries:
                 sleep(float(2 ** (attempts - 1)))
                 continue
             break
@@ -335,7 +341,7 @@ def _execute_one(
 
         retryable = response.status == 429 or 500 <= response.status <= 599
         last_error = _provider_http_error(response, retryable)
-        if retryable and attempts <= MAX_RETRIES:
+        if retryable and attempts <= max_retries:
             delay = _retry_delay(response.headers, attempts)
             sleep(delay)
             continue

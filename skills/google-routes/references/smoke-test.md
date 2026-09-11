@@ -14,4 +14,5 @@ python scripts/smoke_test.py --confirm-billable-smoke C:\private\routes-smoke.js
 
 runner 只輸出版本、整體狀態、request 數、各 request 的 ID、mode、status 與 attempts；
 不輸出位置、Place ID、路線時間、API key 或 Google raw response。提交驗收證據前仍要
-人工檢查輸出已去識別化。
+人工檢查輸出已去識別化。Smoke runner 關閉一般查詢的重試，因此最多兩筆輸入就是
+最多兩次實際 HTTP 呼叫。
