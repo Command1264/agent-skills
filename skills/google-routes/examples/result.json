@@ -1,0 +1,21 @@
+{
+  "schema_version": "1",
+  "cli_contract_version": "1.0.0",
+  "profile": "summary",
+  "status": "success",
+  "results": [
+    {
+      "request_id": "example-drive-1",
+      "status": "success",
+      "travel_mode": "DRIVE",
+      "distance_meters": 12345,
+      "duration_seconds": 1250.5,
+      "static_duration_seconds": 1100,
+      "warnings": [],
+      "fallback": null,
+      "origin_place_id": "ChIJExampleOrigin",
+      "destination_place_id": "ChIJExampleDestination",
+      "attempts": 1
+    }
+  ]
+}
