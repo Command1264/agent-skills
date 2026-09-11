@@ -1,0 +1,40 @@
+name: 文件或維護工作
+description: 改善文件、CI、repository 結構或共用工具。
+title: "docs: "
+labels:
+  - needs-triage
+  - type:maintenance
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 工作類型
+      options:
+        - 文件
+        - CI 或測試基礎
+        - Repository 維護
+        - Agent 指引
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: 問題與範圍
+      description: 說明需要修改的內容及不在本次範圍內的項目。
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 驗收方式
+      description: 列出可重複檢查的完成條件。
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: 公開資料確認
+      options:
+        - label: 我已確認內容不含 secret、私人位置或未去識別的 response。
+          required: true

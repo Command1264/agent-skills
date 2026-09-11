@@ -1,0 +1,62 @@
+name: Bug 回報
+description: 回報可重現的錯誤、回歸或跨平台問題。
+title: "fix(<skill>): "
+labels:
+  - needs-triage
+  - type:bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        請先移除 log 內的 API key、完整地址、Place ID、私人路徑與外部 API response。安全問題請改用 Private Vulnerability Reporting。
+  - type: input
+    id: skill
+    attributes:
+      label: Skill 名稱與版本
+      placeholder: google-routes v1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: 作業系統
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - 其他
+    validations:
+      required: true
+  - type: input
+    id: agent
+    attributes:
+      label: Agent 與版本
+      placeholder: Codex desktop
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 重現步驟
+      description: 使用虛構或去識別資料，列出最小重現方式。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 預期行為
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 實際行為
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: 公開資料確認
+      options:
+        - label: 我已移除 secret、私人位置、私人路徑及未去識別的 response。
+          required: true
