@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Command1264/agent-skills/google-routes/query-v1.schema.json",
+  "title": "google-routes query envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile", "requests"],
+  "properties": {
+    "schema_version": {"const": "1"},
+    "profile": {"const": "summary"},
+    "rate_limit_qpm": {"type": "integer", "minimum": 1, "maximum": 3000, "default": 60},
+    "requests": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/route_request"}
+    }
+  },
+  "$defs": {
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "address": {"type": "string", "minLength": 1},
+        "place_id": {"type": "string", "minLength": 1}
+      },
+      "oneOf": [
+        {"required": ["address"]},
+        {"required": ["place_id"]}
+      ]
+    },
+    "route_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_id", "origin", "destination", "travel_mode", "departure_time"],
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+        },
+        "origin": {"$ref": "#/$defs/location"},
+        "destination": {"$ref": "#/$defs/location"},
+        "travel_mode": {"enum": ["DRIVE", "TWO_WHEELER"]},
+        "departure_time": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}

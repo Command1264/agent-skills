@@ -1,0 +1,18 @@
+{
+  "schema_version": "1",
+  "profile": "summary",
+  "rate_limit_qpm": 60,
+  "requests": [
+    {
+      "request_id": "example-drive-1",
+      "origin": {
+        "address": "示例市起點路 1 號"
+      },
+      "destination": {
+        "place_id": "ChIJExampleDestination"
+      },
+      "travel_mode": "DRIVE",
+      "departure_time": "2099-01-07T08:00:00+08:00"
+    }
+  ]
+}
