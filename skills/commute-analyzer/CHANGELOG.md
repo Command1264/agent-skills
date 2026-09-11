@@ -1,0 +1,12 @@
+# Changelog
+
+所有值得注意的變更都記錄在此。版本遵循 Semantic Versioning。
+
+## [Unreleased]
+
+### Added
+
+- 新增離線 `capabilities` 與 `plan`、需 API key 的 `run`。
+- 新增 `google-routes` v1 fail-closed 相依性檢查。
+- 新增一至四週、星期、公司、早晚時間與 QPM 的 plan 參數。
+- 新增機車完整性排名、汽車補充統計、私人 JSON／繁體中文 Markdown 報告及 usage ledger。

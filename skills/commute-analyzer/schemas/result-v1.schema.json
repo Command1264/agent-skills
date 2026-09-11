@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Command1264/agent-skills/skills/commute-analyzer/schemas/result-v1.schema.json",
+  "title": "Commute Analyzer result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis_contract_version", "plan_id", "generated_at", "status", "dependency_path", "request_summary", "companies", "ranking", "outputs"],
+  "properties": {
+    "schema_version": {"const": "1"},
+    "analysis_contract_version": {"const": "1.0.0"},
+    "plan_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "status": {"enum": ["success", "partial_success", "failure"]},
+    "dependency_path": {"type": "string", "minLength": 1},
+    "request_summary": {"$ref": "#/$defs/requestSummary"},
+    "companies": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/companyResult"}},
+    "ranking": {"type": "array", "items": {"$ref": "#/$defs/rankingEntry"}},
+    "outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["json_report", "markdown_report", "usage_ledger"],
+      "properties": {
+        "json_report": {"type": "string", "minLength": 1},
+        "markdown_report": {"type": "string", "minLength": 1},
+        "usage_ledger": {"type": "string", "minLength": 1}
+      }
+    }
+  },
+  "$defs": {
+    "requestSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["planned", "actual_http_requests", "retries", "success", "degraded", "failed"],
+      "properties": {
+        "planned": {"type": "integer", "minimum": 1},
+        "actual_http_requests": {"type": "integer", "minimum": 0},
+        "retries": {"type": "integer", "minimum": 0},
+        "success": {"type": "integer", "minimum": 0},
+        "degraded": {"type": "integer", "minimum": 0},
+        "failed": {"type": "integer", "minimum": 0}
+      }
+    },
+    "statistics": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["average_seconds", "median_seconds", "minimum_seconds", "maximum_seconds"],
+      "properties": {
+        "average_seconds": {"type": "number", "minimum": 0},
+        "median_seconds": {"type": "number", "minimum": 0},
+        "minimum_seconds": {"type": "number", "minimum": 0},
+        "maximum_seconds": {"type": "number", "minimum": 0}
+      }
+    },
+    "modeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_sample_count", "successful_sample_count", "complete", "statistics", "weekly_total_seconds", "four_week_month_estimate_seconds", "samples"],
+      "properties": {
+        "required_sample_count": {"type": "integer", "minimum": 1},
+        "successful_sample_count": {"type": "integer", "minimum": 0},
+        "complete": {"type": "boolean"},
+        "statistics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["outbound", "return", "daily_round_trip"],
+          "properties": {
+            "outbound": {"$ref": "#/$defs/statistics"},
+            "return": {"$ref": "#/$defs/statistics"},
+            "daily_round_trip": {"$ref": "#/$defs/statistics"}
+          }
+        },
+        "weekly_total_seconds": {"type": ["number", "null"], "minimum": 0},
+        "four_week_month_estimate_seconds": {"type": ["number", "null"], "minimum": 0},
+        "samples": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {"$ref": "#/$defs/successSample"},
+              {"$ref": "#/$defs/errorSample"}
+            ]
+          }
+        }
+      }
+    },
+    "sampleBase": {
+      "type": "object",
+      "required": ["request_id", "company_id", "company_name", "date", "direction", "travel_mode", "status", "attempts"],
+      "properties": {
+        "request_id": {"type": "string", "minLength": 1},
+        "company_id": {"type": "string", "minLength": 1},
+        "company_name": {"type": "string", "minLength": 1},
+        "date": {"type": "string", "format": "date"},
+        "direction": {"enum": ["outbound", "return"]},
+        "travel_mode": {"enum": ["DRIVE", "TWO_WHEELER"]},
+        "status": {"enum": ["success", "degraded", "error"]},
+        "attempts": {"type": "integer", "minimum": 1, "maximum": 3}
+      }
+    },
+    "successSample": {
+      "allOf": [
+        {"$ref": "#/$defs/sampleBase"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["request_id", "company_id", "company_name", "date", "direction", "travel_mode", "status", "attempts", "duration_seconds", "static_duration_seconds", "warnings", "fallback"],
+          "properties": {
+            "request_id": true,
+            "company_id": true,
+            "company_name": true,
+            "date": true,
+            "direction": true,
+            "travel_mode": true,
+            "status": {"enum": ["success", "degraded"]},
+            "attempts": true,
+            "duration_seconds": {"type": "number", "minimum": 0},
+            "static_duration_seconds": {"type": "number", "minimum": 0},
+            "warnings": {"type": "array", "items": {"type": "string"}},
+            "fallback": {
+              "type": ["object", "null"],
+              "additionalProperties": false,
+              "required": ["routing_mode", "reason"],
+              "properties": {
+                "routing_mode": {"type": "string"},
+                "reason": {"type": "string"}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "errorSample": {
+      "allOf": [
+        {"$ref": "#/$defs/sampleBase"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["request_id", "company_id", "company_name", "date", "direction", "travel_mode", "status", "attempts", "error"],
+          "properties": {
+            "request_id": true,
+            "company_id": true,
+            "company_name": true,
+            "date": true,
+            "direction": true,
+            "travel_mode": true,
+            "status": {"const": "error"},
+            "attempts": true,
+            "error": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["code", "retryable"],
+              "properties": {
+                "code": {"type": "string"},
+                "retryable": {"type": "boolean"},
+                "http_status": {"type": "integer", "minimum": 300, "maximum": 599}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "companyResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["company_id", "company_name", "ranking_eligible", "ranking_exclusion_reasons", "modes"],
+      "properties": {
+        "company_id": {"type": "string", "minLength": 1},
+        "company_name": {"type": "string", "minLength": 1},
+        "ranking_eligible": {"type": "boolean"},
+        "ranking_exclusion_reasons": {"type": "array", "items": {"type": "string"}},
+        "modes": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "TWO_WHEELER": {"$ref": "#/$defs/modeResult"},
+            "DRIVE": {"$ref": "#/$defs/modeResult"}
+          }
+        }
+      }
+    },
+    "rankingEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rank", "company_id", "company_name", "daily_round_trip_average_seconds"],
+      "properties": {
+        "rank": {"type": "integer", "minimum": 1},
+        "company_id": {"type": "string", "minLength": 1},
+        "company_name": {"type": "string", "minLength": 1},
+        "daily_round_trip_average_seconds": {"type": "number", "minimum": 0}
+      }
+    }
+  }
+}

@@ -1,0 +1,123 @@
+{
+  "schema_version": "1",
+  "analysis_contract_version": "1.0.0",
+  "plan_id": "sha256:60f4e81861e1850bb351e4a8a3a0e98328228a18f39a024a06d0b7ab532c6814",
+  "generated_at": "2026-09-12T12:05:00+00:00",
+  "status": "success",
+  "dependency_path": "/opt/skills/google-routes",
+  "request_summary": {
+    "planned": 4,
+    "actual_http_requests": 4,
+    "retries": 0,
+    "success": 4,
+    "degraded": 0,
+    "failed": 0
+  },
+  "companies": [
+    {
+      "company_id": "example-co",
+      "company_name": "Example Co",
+      "ranking_eligible": true,
+      "ranking_exclusion_reasons": [],
+      "modes": {
+        "TWO_WHEELER": {
+          "required_sample_count": 2,
+          "successful_sample_count": 2,
+          "complete": true,
+          "statistics": {
+            "outbound": {"average_seconds": 600, "median_seconds": 600, "minimum_seconds": 600, "maximum_seconds": 600},
+            "return": {"average_seconds": 600, "median_seconds": 600, "minimum_seconds": 600, "maximum_seconds": 600},
+            "daily_round_trip": {"average_seconds": 1200, "median_seconds": 1200, "minimum_seconds": 1200, "maximum_seconds": 1200}
+          },
+          "weekly_total_seconds": 1200,
+          "four_week_month_estimate_seconds": 4800,
+          "samples": [
+            {
+              "request_id": "example-co.20260914.outbound.two-wheeler",
+              "company_id": "example-co",
+              "company_name": "Example Co",
+              "date": "2026-09-14",
+              "direction": "outbound",
+              "travel_mode": "TWO_WHEELER",
+              "status": "success",
+              "attempts": 1,
+              "duration_seconds": 600,
+              "static_duration_seconds": 540,
+              "warnings": [],
+              "fallback": null
+            },
+            {
+              "request_id": "example-co.20260914.return.two-wheeler",
+              "company_id": "example-co",
+              "company_name": "Example Co",
+              "date": "2026-09-14",
+              "direction": "return",
+              "travel_mode": "TWO_WHEELER",
+              "status": "success",
+              "attempts": 1,
+              "duration_seconds": 600,
+              "static_duration_seconds": 540,
+              "warnings": [],
+              "fallback": null
+            }
+          ]
+        },
+        "DRIVE": {
+          "required_sample_count": 2,
+          "successful_sample_count": 2,
+          "complete": true,
+          "statistics": {
+            "outbound": {"average_seconds": 900, "median_seconds": 900, "minimum_seconds": 900, "maximum_seconds": 900},
+            "return": {"average_seconds": 900, "median_seconds": 900, "minimum_seconds": 900, "maximum_seconds": 900},
+            "daily_round_trip": {"average_seconds": 1800, "median_seconds": 1800, "minimum_seconds": 1800, "maximum_seconds": 1800}
+          },
+          "weekly_total_seconds": 1800,
+          "four_week_month_estimate_seconds": 7200,
+          "samples": [
+            {
+              "request_id": "example-co.20260914.outbound.drive",
+              "company_id": "example-co",
+              "company_name": "Example Co",
+              "date": "2026-09-14",
+              "direction": "outbound",
+              "travel_mode": "DRIVE",
+              "status": "success",
+              "attempts": 1,
+              "duration_seconds": 900,
+              "static_duration_seconds": 840,
+              "warnings": [],
+              "fallback": null
+            },
+            {
+              "request_id": "example-co.20260914.return.drive",
+              "company_id": "example-co",
+              "company_name": "Example Co",
+              "date": "2026-09-14",
+              "direction": "return",
+              "travel_mode": "DRIVE",
+              "status": "success",
+              "attempts": 1,
+              "duration_seconds": 900,
+              "static_duration_seconds": 840,
+              "warnings": [],
+              "fallback": null
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "ranking": [
+    {
+      "rank": 1,
+      "company_id": "example-co",
+      "company_name": "Example Co",
+      "daily_round_trip_average_seconds": 1200
+    }
+  ],
+  "outputs": {
+    "json_report": "/private/reports/2026-09-12-60f4e81861e1.json",
+    "markdown_report": "/private/reports/2026-09-12-60f4e81861e1.md",
+    "usage_ledger": "/private/usage.jsonl"
+  }
+}

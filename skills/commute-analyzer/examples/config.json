@@ -1,0 +1,21 @@
+{
+  "schema_version": "1",
+  "home": {
+    "label": "home",
+    "location": {
+      "address": "1 Example Road, Example City"
+    }
+  },
+  "companies": [
+    {
+      "id": "example-co",
+      "name": "Example Co",
+      "location": {
+        "place_id": "ChIJExampleCompany"
+      }
+    }
+  ],
+  "utc_offset": "+08:00",
+  "morning_departure_time": "08:00",
+  "evening_departure_time": "18:00"
+}
