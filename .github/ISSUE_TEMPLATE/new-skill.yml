@@ -1,0 +1,46 @@
+name: 新 Skill 提案
+description: 提議一個可獨立安裝的新 Agent Skill。
+title: "feat: "
+labels:
+  - needs-triage
+  - type:new-skill
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感謝你的提案。請勿填入 API key、完整住家地址、私人設定或未去識別的外部 API response。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 想解決的問題
+      description: 描述使用情境、目前阻礙，以及為什麼值得建立新的 Skill。
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 預期成果
+      description: 說明使用者如何觸發 Skill，以及成功時應取得什麼結果。
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: 不可妥協的限制
+      description: 例如隱私、成本、平台、相依性、不得自動執行的動作。
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 已知證據或官方文件
+      description: 提供公開且不含敏感資料的連結；不知道時可填「尚無」。
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: 公開資料確認
+      options:
+        - label: 我已確認內容不含 secret、私人位置或未去識別的 response。
+          required: true
