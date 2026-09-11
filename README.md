@@ -5,7 +5,7 @@
 
 ## 目前狀態
 
-Repository foundation 建置中，尚未發布可穩定安裝的 Skill。
+Repository foundation 已建立，尚未發布可穩定安裝的 Skill。
 
 規劃中的第一批 Skills：
 
