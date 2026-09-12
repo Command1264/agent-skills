@@ -5,7 +5,8 @@ response parser 或 Google contract 變更時執行。
 
 1. 在 repository 外建立私人 query JSON，最多兩筆，且每個 mode 最多一筆；使用不含
    地址或人名的 `request_id`。
-2. 在目前 shell 設定 `GOOGLE_MAPS_API_KEY`，不要把值寫進命令歷史或文件。
+2. 執行 `python scripts/google_routes.py credentials check`，確認 secret file 有效且舊
+   `GOOGLE_MAPS_API_KEY` 已移除。不要把 key 寫進命令歷史、文件或 smoke 輸入。
 3. 執行：
 
 ```powershell

@@ -4,8 +4,10 @@
 
 ## Secret 與私人資料
 
-- API key 只能由明確環境變數或使用者核准的 secret store 取得，不得 hardcode、commit、
-  回傳、寫入一般 log 或附在 Issue／PR。
+- 持久 API key 必須由 provider Skill 擁有的使用者層級、版本化 secret store 取得，不得
+  透過環境變數 fallback、hardcode、commit、回傳、寫入一般 log 或附在 Issue／PR。
+- Secret store 不得放在 repository、Skill 安裝目錄或同步資料夾；consumer Skill 不得
+  重新解析或傳遞 provider 的明文 credential。
 - 完整住家地址、私人設定、未去識別 response 與產生的個人報告不得進入公開 repository。
 - 預設輸出使用非敏感 label；只有使用者明確要求時才顯示完整位置，而且仍不得顯示 secret。
 - 測試與文件使用虛構位置、官方公開範例或不可逆的去識別資料。

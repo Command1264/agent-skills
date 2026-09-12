@@ -16,14 +16,16 @@ HTTP request，也不解析 Google 原始 response。
    使用者已有的 Place ID。
 2. 從本 Skill 目錄執行 `python scripts/google_routes.py capabilities`。若 Python 低於
    3.11、contract、schema、mode 或 profile 不相容，停止並說明不相容項目。
-3. 依 [`schemas/query-v1.schema.json`](schemas/query-v1.schema.json) 建立嚴格 JSON。
+3. 執行 `python scripts/google_routes.py credentials check`。若 secret file 尚未建立，請使用者在
+   自己的終端執行 `python scripts/google_routes.py credentials set`；不要要求使用者把 key 貼進
+   對話、命令參數、Issue 或一般 log。格式、路徑與遷移方式見
+   [`references/credentials.md`](references/credentials.md)。
+4. 依 [`schemas/query-v1.schema.json`](schemas/query-v1.schema.json) 建立嚴格 JSON。
    使用者沒有指定時，`profile` 使用 `summary`、`rate_limit_qpm` 使用 `60`。
-4. 在任何外部呼叫前顯示 request 數、交通模式、`summary` profile、最多兩次重試，
+5. 在任何外部呼叫前顯示 request 數、交通模式、`summary` profile、最多兩次重試，
    以及本機 QPM 設定。這項 QPM 不是 Google Cloud quota 的查詢結果。
-5. 正常 request 數不超過 20 時，在顯示預覽後執行；超過 20 時，先取得使用者對
+6. 正常 request 數不超過 20 時，在顯示預覽後執行；超過 20 時，先取得使用者對
    該批次內容的明確確認。輸入改變後重新預覽與確認。
-6. 確認環境中已有 `GOOGLE_MAPS_API_KEY`。缺少時停止，提供下方設定指引；不要要求
-   使用者把 key 貼進對話、檔案、Issue 或命令輸出。
 7. 將 JSON 由 stdin 傳給 `python scripts/google_routes.py query`。保存 stdout 的 JSON
    時使用使用者指定的位置；未指定時不要在 repository 建立結果檔。
 8. 依 exit code 與每筆 `request_id` 檢查結果。`degraded` 的 fallback 路線應保留並
@@ -40,6 +42,8 @@ HTTP request，也不解析 Google 原始 response。
 
 ```powershell
 python scripts/google_routes.py capabilities
+python scripts/google_routes.py credentials path
+python scripts/google_routes.py credentials check
 Get-Content request.json | python scripts/google_routes.py query
 ```
 
@@ -53,7 +57,7 @@ Get-Content request.json | python scripts/google_routes.py query
 
 - 已啟用 billing 與 Routes API。
 - key 限制為 Routes API；適合時再加上來源 IP application restriction。
-- key 只透過 `GOOGLE_MAPS_API_KEY` 環境變數提供。
+- key 只保存於 `google-routes` v2 的使用者層級 TOML secret file；不支援環境變數 fallback。
 - 由 Cloud Console 檢查實際 quota、費用與告警；本 Skill 的 60 QPM 只是本機上限。
 
 首次發布或 provider contract 疑似改變時，先依
@@ -68,6 +72,7 @@ Get-Content request.json | python scripts/google_routes.py query
 
 - 輸入缺欄位、型別錯誤、未知欄位、重複 `request_id` 或 schema 不相容。
 - `departure_time` 不是含明確 offset 的未來時間。
-- API key 缺少，或 endpoint 不是本 Skill 固定的 Google Routes HTTPS endpoint。
+- secret file 缺少、無效、權限不安全、仍存在舊 `GOOGLE_MAPS_API_KEY`，或 endpoint 不是
+  本 Skill 固定的 Google Routes HTTPS endpoint。
 - 超過 20 筆但尚未取得相同批次內容的明確確認。
 - 真實 smoke 輸入超過兩筆、同模式超過一筆，或沒有明確 opt-in flag。

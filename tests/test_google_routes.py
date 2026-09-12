@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -13,10 +14,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = ROOT / "skills" / "google-routes" / "scripts" / "google_routes.py"
+sys.path.insert(0, str(MODULE_PATH.parent))
 SPEC = importlib.util.spec_from_file_location("google_routes", MODULE_PATH)
 assert SPEC is not None and SPEC.loader is not None
 google_routes = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(google_routes)
+SMOKE_MODULE_PATH = ROOT / "skills" / "google-routes" / "scripts" / "smoke_test.py"
+SMOKE_SPEC = importlib.util.spec_from_file_location("google_routes_smoke", SMOKE_MODULE_PATH)
+assert SMOKE_SPEC is not None and SMOKE_SPEC.loader is not None
+google_routes_smoke = importlib.util.module_from_spec(SMOKE_SPEC)
+SMOKE_SPEC.loader.exec_module(google_routes_smoke)
 
 
 def route_request(
@@ -112,11 +119,12 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(stderr.getvalue(), "")
         result = json.loads(stdout.getvalue())
-        self.assertEqual(result["skill_version"], "1.0.0")
-        self.assertEqual(result["cli_contract_version"], "1.0.0")
+        self.assertEqual(result["skill_version"], "2.0.0")
+        self.assertEqual(result["cli_contract_version"], "2.0.0")
         self.assertEqual(result["schema_versions"], ["1"])
         self.assertEqual(result["travel_modes"], ["DRIVE", "TWO_WHEELER"])
         self.assertEqual(result["output_profiles"], ["summary"])
+        self.assertIn("credentials check", result["commands"])
 
     def test_unknown_field_reports_precise_json_path(self) -> None:
         payload = batch()
@@ -351,8 +359,83 @@ class ExampleTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 2)
         self.assertIn("--confirm-billable-smoke", completed.stderr)
 
+    def test_smoke_runner_uses_secret_file_and_never_legacy_environment(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            query_path = root / "query.json"
+            query_path.write_text(json.dumps(batch()), encoding="utf-8")
+            credential_path = root / "google-routes.toml"
+            credential_path.write_text(
+                'schema_version = "1"\napi_key = "test-key-not-a-real-secret"\n',
+                encoding="utf-8",
+            )
+            if os.name != "nt":
+                credential_path.chmod(0o600)
+            transport = FakeTransport(
+                [google_routes.HttpResponse(200, provider_success(), {})]
+            )
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+
+            exit_code = google_routes_smoke.run(
+                ["--confirm-billable-smoke", str(query_path)],
+                environ={},
+                credential_path=credential_path,
+                transport=transport,
+                stdout=stdout,
+                stderr=stderr,
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(len(transport.calls), 1)
+        self.assertEqual(
+            transport.calls[0]["headers"]["X-Goog-Api-Key"],
+            "test-key-not-a-real-secret",
+        )
+        self.assertNotIn(
+            "test-key-not-a-real-secret", stdout.getvalue() + stderr.getvalue()
+        )
+
+    def test_smoke_runner_rejects_legacy_environment_before_transport(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            query_path = root / "query.json"
+            query_path.write_text(json.dumps(batch()), encoding="utf-8")
+            credential_path = root / "google-routes.toml"
+            credential_path.write_text(
+                'schema_version = "1"\napi_key = "test-key-not-a-real-secret"\n',
+                encoding="utf-8",
+            )
+            if os.name != "nt":
+                credential_path.chmod(0o600)
+            transport = FakeTransport(
+                [google_routes.HttpResponse(200, provider_success(), {})]
+            )
+
+            exit_code = google_routes_smoke.run(
+                ["--confirm-billable-smoke", str(query_path)],
+                environ={"GOOGLE_MAPS_API_KEY": "legacy-secret"},
+                credential_path=credential_path,
+                transport=transport,
+                stdout=io.StringIO(),
+                stderr=io.StringIO(),
+            )
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(transport.calls, [])
+
 
 class ErrorAndCliTests(unittest.TestCase):
+
+    def _write_credentials(self, root: Path, key: str = "test-key-not-a-real-secret") -> Path:
+        path = root / "google-routes.toml"
+        path.write_text(
+            f'schema_version = "1"\napi_key = "{key}"\n',
+            encoding="utf-8",
+        )
+        if os.name != "nt":
+            path.chmod(0o600)
+        return path
 
     def test_ordinary_4xx_is_not_retried(self) -> None:
         transport = FakeTransport(
@@ -389,21 +472,54 @@ class ErrorAndCliTests(unittest.TestCase):
         self.assertEqual([item["request_id"] for item in output["results"]], ["ok", "bad"])
         self.assertEqual([item["status"] for item in output["results"]], ["success", "error"])
 
-    def test_query_requires_environment_key_without_echoing_it(self) -> None:
-        stdout = io.StringIO()
-        stderr = io.StringIO()
+    def test_query_requires_secret_file_without_echoing_private_values(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            missing_path = Path(directory) / "missing.toml"
+            stdout = io.StringIO()
+            stderr = io.StringIO()
 
-        exit_code = google_routes.run(
-            ["query"],
-            stdin=io.StringIO(json.dumps(batch())),
-            stdout=stdout,
-            stderr=stderr,
-            environ={},
-        )
+            exit_code = google_routes.run(
+                ["query"],
+                stdin=io.StringIO(json.dumps(batch())),
+                stdout=stdout,
+                stderr=stderr,
+                environ={},
+                credential_path=missing_path,
+            )
 
         self.assertEqual(exit_code, 2)
-        self.assertEqual(json.loads(stdout.getvalue())["error"]["code"], "missing_api_key")
-        self.assertIn("GOOGLE_MAPS_API_KEY", stderr.getvalue())
+        self.assertEqual(
+            json.loads(stdout.getvalue())["error"]["code"],
+            "credential_file_not_found",
+        )
+        self.assertNotIn(str(missing_path), stdout.getvalue() + stderr.getvalue())
+
+    def test_query_rejects_legacy_environment_variable_without_using_it(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            credential_path = self._write_credentials(Path(directory))
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            transport = FakeTransport(
+                [google_routes.HttpResponse(200, provider_success(), {})]
+            )
+
+            exit_code = google_routes.run(
+                ["query"],
+                stdin=io.StringIO(json.dumps(batch())),
+                stdout=stdout,
+                stderr=stderr,
+                environ={"GOOGLE_MAPS_API_KEY": "legacy-secret"},
+                transport=transport,
+                credential_path=credential_path,
+            )
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(
+            json.loads(stdout.getvalue())["error"]["code"],
+            "legacy_api_key_environment_variable",
+        )
+        self.assertEqual(transport.calls, [])
+        self.assertNotIn("legacy-secret", stdout.getvalue() + stderr.getvalue())
 
     def test_query_writes_only_json_to_stdout_and_diagnostics_to_stderr(self) -> None:
         stdout = io.StringIO()
@@ -412,19 +528,130 @@ class ErrorAndCliTests(unittest.TestCase):
             [google_routes.HttpResponse(200, provider_success(), {})]
         )
 
-        exit_code = google_routes.run(
-            ["query"],
-            stdin=io.StringIO(json.dumps(batch())),
-            stdout=stdout,
-            stderr=stderr,
-            environ={"GOOGLE_MAPS_API_KEY": "test-key-not-a-real-secret"},
-            transport=transport,
-        )
+        with tempfile.TemporaryDirectory() as directory:
+            credential_path = self._write_credentials(Path(directory))
+            exit_code = google_routes.run(
+                ["query"],
+                stdin=io.StringIO(json.dumps(batch())),
+                stdout=stdout,
+                stderr=stderr,
+                environ={},
+                transport=transport,
+                credential_path=credential_path,
+            )
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(json.loads(stdout.getvalue())["status"], "success")
         self.assertNotIn("完成", stdout.getvalue())
         self.assertIn("路線批次完成", stderr.getvalue())
+
+    def test_credential_management_commands_are_non_billable_and_redacted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            credential_path = Path(directory) / "google-routes.toml"
+            transport = FakeTransport([])
+
+            set_stdout = io.StringIO()
+            set_exit = google_routes.run(
+                ["credentials", "set"],
+                stdout=set_stdout,
+                stderr=io.StringIO(),
+                environ={"GOOGLE_MAPS_API_KEY": "legacy-secret"},
+                transport=transport,
+                credential_path=credential_path,
+                credential_reader=lambda _: "replacement-test-key",
+            )
+            check_stdout = io.StringIO()
+            check_exit = google_routes.run(
+                ["credentials", "check"],
+                stdout=check_stdout,
+                stderr=io.StringIO(),
+                environ={},
+                transport=transport,
+                credential_path=credential_path,
+            )
+            path_stdout = io.StringIO()
+            path_exit = google_routes.run(
+                ["credentials", "path"],
+                stdout=path_stdout,
+                stderr=io.StringIO(),
+                environ={},
+                transport=transport,
+                credential_path=credential_path,
+            )
+
+        self.assertEqual((set_exit, check_exit, path_exit), (0, 0, 0))
+        self.assertEqual(transport.calls, [])
+        self.assertTrue(json.loads(check_stdout.getvalue())["credential"]["configured"])
+        self.assertEqual(
+            json.loads(path_stdout.getvalue())["credential"]["path"],
+            str(credential_path),
+        )
+        combined = set_stdout.getvalue() + check_stdout.getvalue() + path_stdout.getvalue()
+        self.assertNotIn("replacement-test-key", combined)
+        self.assertNotIn("legacy-secret", combined)
+
+    def test_credentials_set_requires_interactive_input_without_test_injection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            credential_path = Path(directory) / "google-routes.toml"
+            stdout = io.StringIO()
+
+            exit_code = google_routes.run(
+                ["credentials", "set"],
+                stdin=io.StringIO("secret-must-not-be-read"),
+                stdout=stdout,
+                stderr=io.StringIO(),
+                environ={},
+                credential_path=credential_path,
+            )
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(
+            json.loads(stdout.getvalue())["error"]["code"],
+            "credential_interactive_required",
+        )
+        self.assertFalse(credential_path.exists())
+
+    def test_windows_check_reports_acl_verification_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            credential_path = self._write_credentials(Path(directory))
+            stdout = io.StringIO()
+
+            exit_code = google_routes.run(
+                ["credentials", "check"],
+                stdout=stdout,
+                stderr=io.StringIO(),
+                environ={},
+                platform_name="win32",
+                home=Path(r"C:\Users\example"),
+                credential_path=credential_path,
+            )
+
+        self.assertEqual(exit_code, 0)
+        warning_codes = {
+            warning["code"]
+            for warning in json.loads(stdout.getvalue())["credential"]["warnings"]
+        }
+        self.assertEqual(warning_codes, {"windows_acl_not_verified"})
+
+    def test_credentials_check_reports_legacy_environment_after_validating_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            credential_path = self._write_credentials(Path(directory))
+            stdout = io.StringIO()
+
+            exit_code = google_routes.run(
+                ["credentials", "check"],
+                stdout=stdout,
+                stderr=io.StringIO(),
+                environ={"GOOGLE_MAPS_API_KEY": "legacy-secret"},
+                credential_path=credential_path,
+            )
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(
+            json.loads(stdout.getvalue())["error"]["code"],
+            "legacy_api_key_environment_variable",
+        )
+        self.assertNotIn("legacy-secret", stdout.getvalue())
 
 
 if __name__ == "__main__":
