@@ -10,13 +10,16 @@ import sys
 import time
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, TextIO
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+import google_routes_credentials
 
-SKILL_VERSION = "1.0.0"
-CLI_CONTRACT_VERSION = "1.0.0"
+
+SKILL_VERSION = "2.0.0"
+CLI_CONTRACT_VERSION = "2.0.0"
 SCHEMA_VERSION = "1"
 ROUTES_ENDPOINT = "https://routes.googleapis.com/directions/v2:computeRoutes"
 FIELD_MASK = ",".join(
@@ -151,7 +154,13 @@ def capabilities() -> dict[str, object]:
         "skill_version": SKILL_VERSION,
         "cli_contract_version": CLI_CONTRACT_VERSION,
         "schema_versions": [SCHEMA_VERSION],
-        "commands": ["capabilities", "query"],
+        "commands": [
+            "capabilities",
+            "credentials path",
+            "credentials check",
+            "credentials set",
+            "query",
+        ],
         "travel_modes": list(SUPPORTED_TRAVEL_MODES),
         "output_profiles": ["summary"],
         "default_rate_limit_qpm": 60,
@@ -259,7 +268,7 @@ def execute_batch(
 ) -> tuple[dict[str, object], int]:
     validated = validate_batch(payload)
     if not api_key:
-        raise InputError("$environment.GOOGLE_MAPS_API_KEY", "尚未設定")
+        raise InputError("$credentials.api_key", "尚未解析有效 credential")
     if isinstance(max_retries, bool) or not isinstance(max_retries, int):
         raise ValueError("max_retries 必須是 0 到 2 的整數")
     if not 0 <= max_retries <= MAX_RETRIES:
@@ -557,10 +566,93 @@ def run(
     stderr: TextIO = sys.stderr,
     environ: Mapping[str, str] = os.environ,
     transport: Transport | None = None,
+    platform_name: str | None = None,
+    home: Path | None = None,
+    credential_path: Path | None = None,
+    credential_reader: Callable[[str], str] | None = None,
 ) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     if arguments == ["capabilities"]:
         _write_json(stdout, capabilities())
+        return 0
+    resolved_credential_path = credential_path or google_routes_credentials.default_credentials_path(
+        platform_name=sys.platform if platform_name is None else platform_name,
+        environ=environ,
+        home=Path.home() if home is None else home,
+    )
+    if arguments == ["credentials", "path"]:
+        _write_json(
+            stdout,
+            {
+                "schema_version": SCHEMA_VERSION,
+                "credential": {"path": str(resolved_credential_path)},
+            },
+        )
+        return 0
+    if arguments == ["credentials", "set"]:
+        try:
+            if credential_reader is None:
+                if not stdin.isatty():
+                    raise google_routes_credentials.CredentialError(
+                        "credential_interactive_required",
+                        "$credential_file.api_key",
+                        "credentials set 必須在互動式終端執行",
+                    )
+                stored = google_routes_credentials.write_credentials(
+                    path=resolved_credential_path
+                )
+            else:
+                stored = google_routes_credentials.write_credentials(
+                    path=resolved_credential_path,
+                    api_key_reader=credential_reader,
+                )
+        except google_routes_credentials.CredentialError as error:
+            return _write_credential_error(error, stdout, stderr)
+        _write_json(
+            stdout,
+            {
+                "schema_version": SCHEMA_VERSION,
+                "credential": {
+                    "configured": True,
+                    "schema_version": stored.schema_version,
+                    "path": str(stored.path),
+                    "warnings": _credential_warnings(
+                        sys.platform if platform_name is None else platform_name
+                    ),
+                },
+            },
+        )
+        print("google-routes secret file 已安全更新。", file=stderr)
+        return 0
+    if arguments == ["credentials", "check"]:
+        try:
+            stored = google_routes_credentials.load_credentials(
+                path=resolved_credential_path,
+                environ=environ,
+                reject_legacy_environment=False,
+            )
+            if google_routes_credentials.legacy_environment_variable_is_set(environ):
+                raise google_routes_credentials.CredentialError(
+                    "legacy_api_key_environment_variable",
+                    "$environment.GOOGLE_MAPS_API_KEY",
+                    "secret file 有效，但仍須移除舊環境變數",
+                )
+        except google_routes_credentials.CredentialError as error:
+            return _write_credential_error(error, stdout, stderr)
+        _write_json(
+            stdout,
+            {
+                "schema_version": SCHEMA_VERSION,
+                "credential": {
+                    "configured": True,
+                    "schema_version": stored.schema_version,
+                    "path": str(stored.path),
+                    "warnings": _credential_warnings(
+                        sys.platform if platform_name is None else platform_name
+                    ),
+                },
+            },
+        )
         return 0
     if arguments != ["query"]:
         _write_json(
@@ -569,11 +661,14 @@ def run(
                 "schema_version": SCHEMA_VERSION,
                 "error": {
                     "code": "usage_error",
-                    "message": "用法：google_routes.py capabilities | query",
+                    "message": (
+                        "用法：google_routes.py capabilities | credentials "
+                        "path|check|set | query"
+                    ),
                 },
             },
         )
-        print("請指定 capabilities 或 query。", file=stderr)
+        print("請指定 capabilities、credentials path|check|set 或 query。", file=stderr)
         return 2
     try:
         payload = json.load(stdin)
@@ -582,24 +677,15 @@ def run(
         return _write_input_error(input_error, stdout, stderr)
     try:
         validated = validate_batch(payload)
-        api_key = environ.get("GOOGLE_MAPS_API_KEY", "")
-        if not api_key:
-            _write_json(
-                stdout,
-                {
-                    "schema_version": SCHEMA_VERSION,
-                    "error": {
-                        "code": "missing_api_key",
-                        "path": "$environment.GOOGLE_MAPS_API_KEY",
-                        "message": "尚未設定 Google Maps API key",
-                    },
-                },
-            )
-            print("請先設定 GOOGLE_MAPS_API_KEY；不要把 key 寫入檔案或命令輸出。", file=stderr)
-            return 2
-        result, exit_code = execute_batch(
-            validated, api_key=api_key, transport=transport
+        stored = google_routes_credentials.load_credentials(
+            path=resolved_credential_path,
+            environ=environ,
         )
+        result, exit_code = execute_batch(
+            validated, api_key=stored.api_key, transport=transport
+        )
+    except google_routes_credentials.CredentialError as error:
+        return _write_credential_error(error, stdout, stderr)
     except InputError as error:
         return _write_input_error(error, stdout, stderr)
     _write_json(stdout, result)
@@ -613,6 +699,39 @@ def run(
         file=stderr,
     )
     return exit_code
+
+
+def _credential_warnings(platform_name: str) -> list[dict[str, str]]:
+    if platform_name != "win32":
+        return []
+    return [
+        {
+            "code": "windows_acl_not_verified",
+            "message": (
+                "檔案繼承 user-profile ACL；請以 icacls 檢查未授權帳號無讀取權限"
+            ),
+        }
+    ]
+
+
+def _write_credential_error(
+    error: google_routes_credentials.CredentialError,
+    stdout: TextIO,
+    stderr: TextIO,
+) -> int:
+    _write_json(
+        stdout,
+        {
+            "schema_version": SCHEMA_VERSION,
+            "error": {
+                "code": error.code,
+                "path": error.path,
+                "message": error.message,
+            },
+        },
+    )
+    print(f"Credential 錯誤：{error.code}（{error.path}）。", file=stderr)
+    return 2
 
 
 def _write_input_error(error: InputError, stdout: TextIO, stderr: TextIO) -> int:
