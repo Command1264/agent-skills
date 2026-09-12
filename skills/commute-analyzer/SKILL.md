@@ -62,6 +62,10 @@ Get-Content private-plan.json | python scripts/commute_analyzer.py run --confirm
 [`examples/config.json`](examples/config.json)、[`examples/plan-request.json`](examples/plan-request.json)、
 [`examples/plan.json`](examples/plan.json) 與 [`examples/result.json`](examples/result.json)。
 
+首次發布或路線 provider 邊界改變時，維護者依
+[`references/smoke-test.md`](references/smoke-test.md) 執行受兩筆 HTTP request 硬上限保護的
+真實 API smoke；一般通勤分析不要使用這個發布 runner。
+
 ## 停止條件
 
 - 找不到相容的 `google-routes` v1，或其 path／capabilities 與 plan 記錄不同。
