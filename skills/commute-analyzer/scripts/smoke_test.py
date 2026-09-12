@@ -157,13 +157,6 @@ def run(
                 "google-routes 能力或路徑已改變；請重新執行 plan",
                 "$.dependency",
             )
-        if not environment.get("GOOGLE_MAPS_API_KEY"):
-            raise commute_analyzer.InputError(
-                "MISSING_API_KEY",
-                "尚未設定 GOOGLE_MAPS_API_KEY；請勿把 key 寫入檔案或命令輸出",
-                "$environment.GOOGLE_MAPS_API_KEY",
-            )
-
         query = _build_smoke_query(plan)
         smoke_script = dependency_path / "scripts" / "smoke_test.py"
         if not smoke_script.is_file():

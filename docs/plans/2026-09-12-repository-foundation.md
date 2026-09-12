@@ -65,7 +65,7 @@ commute-analyzer v1
 
 - GitHub Actions 以 Python 3.11 在 Windows、Ubuntu、macOS 執行。
 - 驗證 Skill discovery、`SKILL.md` 基本結構、內部 Markdown links、JSON examples／schemas、Python unit tests 與 mock integration tests。
-- CI 不持有 `GOOGLE_MAPS_API_KEY`，也不呼叫 Google API。
+- CI 不持有 `GOOGLE_MAPS_API_KEY`，也不呼叫 Google API。（歷史決策；credential 來源已由 ADR 0007 取代。）
 - 真實 API smoke test 只允許本機明確 opt-in，受兩筆請求硬上限保護，並輸出去識別化證據。
 - Agent 規則鏈從 repository root 與 `skills/<name>/` 代表路徑做靜態 walkthrough；沒有 runtime 證據時不得宣稱模型已實際載入。
 
@@ -108,7 +108,7 @@ commute-analyzer v1
 
 - [ ] Skill 可獨立安裝；缺少或不相容的 `google-routes` 時 fail-closed 並顯示安裝／更新方式。
 - [ ] 相依解析依序支援環境變數、兄弟目錄、專案 scope 與使用者 scope，並揭露實際路徑。
-- [ ] 私人設定跨 Windows、macOS、Linux 使用標準位置，API key 僅取自 `GOOGLE_MAPS_API_KEY`。
+- [ ] 私人設定跨 Windows、macOS、Linux 使用標準位置，API key 僅取自 `GOOGLE_MAPS_API_KEY`。（歷史決策；已由 ADR 0007 取代。）
 - [ ] `plan` 不呼叫 API，產生不可變 `plan_id`、日期、請求數、重試上限、SKU 推定及節流預覽。
 - [ ] `run` 只執行既有 plan；超過二十筆時必須確認同一 `plan_id`。
 - [ ] 預設下一個星期一開始、一週、週一至週五，早上住家到公司、晚上公司到住家。

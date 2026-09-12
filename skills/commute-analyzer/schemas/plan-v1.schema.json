@@ -17,7 +17,7 @@
       "properties": {
         "path": {"type": "string", "minLength": 1},
         "skill_version": {"type": "string", "pattern": "^1\\."},
-        "cli_contract_version": {"const": "1.0.0"},
+        "cli_contract_version": {"const": "2.0.0"},
         "schema_version": {"const": "1"},
         "travel_modes": {"type": "array", "const": ["DRIVE", "TWO_WHEELER"]},
         "output_profile": {"const": "summary"}

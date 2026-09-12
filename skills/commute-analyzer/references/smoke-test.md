@@ -18,7 +18,7 @@ runner 先離線驗證不可變 execution plan、目前解析到的 `google-rout
 1. 在 repository 與 Skill 目錄外保存由目前版本 `plan` 產生的私人 execution plan。plan 必須
    同時包含 `TWO_WHEELER` 與 `DRIVE`，而且 dependency path 與目前安裝位置一致。
 2. 在 Google Cloud Console 確認 Routes API quota、billing 與受限 API key；不要用 `429`
-   測試節流。只透過目前 shell 的 `GOOGLE_MAPS_API_KEY` 提供 key。
+   測試節流。從解析到的 `google-routes` 目錄執行 `credentials check`，不得使用舊環境變數。
 3. 從 `commute-analyzer` Skill 根目錄執行：
 
 ```powershell

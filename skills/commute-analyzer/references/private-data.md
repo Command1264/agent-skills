@@ -14,7 +14,8 @@
 ## 資料分類
 
 - 私人設定與 plan：含完整位置，不得 commit、貼入 Issue／PR 或公開 log。
-- `GOOGLE_MAPS_API_KEY`：只能由環境變數提供，不得寫入 config、plan、報告或 ledger。
+- Google Maps API key：只由 `google-routes` v2 的使用者層級 TOML secret file 保存與解析；
+  不得寫入 commute config、plan、報告、ledger、subprocess argument 或 environment。
 - JSON／Markdown 報告：只保存 label、日期、秒數、狀態、統計與去識別錯誤；不保存完整位置。
 - `usage.jsonl`：append-only，每行只記錄 plan ID、時間、request／retry 數、模式與 SKU 計數。
 - provider raw response：只在程序記憶體中由 `google-routes` 正規化，不由本 Skill 持久化。

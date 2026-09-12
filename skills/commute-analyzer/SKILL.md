@@ -12,12 +12,12 @@ request 計數、統計與私人檔案路徑由 script 決定；Agent 不手算�
 ## 執行流程
 
 1. 執行 `python scripts/commute_analyzer.py capabilities`。這個命令完全離線。
-2. 尋找並驗證 `google-routes` v1。搜尋順序與錯誤修復見
+2. 尋找並驗證 `google-routes` v2。搜尋順序與錯誤修復見
    [`references/dependency-resolution.md`](references/dependency-resolution.md)。缺少或不相容時停止；
    不要自動安裝、複製實作或繞過 capabilities。
 3. 若私人設定不存在，依 [`schemas/config-v1.schema.json`](schemas/config-v1.schema.json)
    協助使用者在作業系統的私人 config directory 建立。完整住家與公司位置只放在該檔；
-   API key 只能放在 `GOOGLE_MAPS_API_KEY`。
+   API key 由 `google-routes` 自己的 secret file 管理，不得加入 commute config。
 4. 依 [`schemas/plan-request-v1.schema.json`](schemas/plan-request-v1.schema.json) 建立 plan request。
    預設為下一個星期一開始的一週、星期一至五、08:00 去程、18:00 回程，並同時取樣
    `TWO_WHEELER` 與 `DRIVE`。使用者可調整一至四週、星期、時間、公司與本機 QPM。
@@ -29,8 +29,8 @@ request 計數、統計與私人檔案路徑由 script 決定；Agent 不手算�
    最終帳單估價，`429` 只應是例外復原情境。
 7. request 數大於 20 時，必須取得使用者對同一個完整 `plan_id` 的明確確認；plan 有任何
    變更或過期都重新執行 `plan`。20 筆以下仍須先顯示預覽，但不要求額外 token。
-8. 確認環境中已有 `GOOGLE_MAPS_API_KEY`，再把未修改的 plan 傳給 `run`。超過門檻時加上
-   `--confirm-plan-id <完整 plan_id>`。不要在命令、對話或 log 顯示 key。
+8. 先執行相依 Skill 的 `credentials check`，再把未修改的 plan 傳給 `run`。超過門檻時加上
+   `--confirm-plan-id <完整 plan_id>`。`commute-analyzer` 不讀取、傳遞或記錄 key。
 9. 檢查 exit code 與 JSON `status`。`TWO_WHEELER` 每個必要樣本都成功才可納入排名；
    `degraded`／fallback 或失敗會排除該公司的機車排名。`DRIVE` 不完整只標示為補充資料不完整，
    不影響機車排名。
@@ -68,8 +68,8 @@ Get-Content private-plan.json | python scripts/commute_analyzer.py run --confirm
 
 ## 停止條件
 
-- 找不到相容的 `google-routes` v1，或其 path／capabilities 與 plan 記錄不同。
+- 找不到相容的 `google-routes` v2，或其 path／capabilities 與 plan 記錄不同。
 - plan request、私人設定或 plan 有未知欄位、型別錯誤、版本不相容或重複 ID。
 - plan 的 `plan_id` 不一致、departure 已到期，或超過 20 筆卻沒有完全相同的確認 token。
-- 未設定 `GOOGLE_MAPS_API_KEY`、私人輸出無法安全寫入，或 dependency 回傳不相容結果。
+- dependency credential 無效、私人輸出無法安全寫入，或 dependency 回傳不相容結果。
 - 使用者要求抵達時間反推；v1 僅支援固定出發時間 `fixed_departure`。

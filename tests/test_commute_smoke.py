@@ -31,7 +31,6 @@ commute_smoke = load_module("commute_smoke", SMOKE_MODULE_PATH)
 NOW = datetime(2026, 9, 13, 4, 0, tzinfo=timezone.utc)
 PRIVATE_ADDRESS = "測試私人地址 123 號"
 PRIVATE_COMPANY = "測試私人公司"
-TEST_API_KEY = "test-only-secret-key"
 
 
 def google_routes_path() -> Path:
@@ -41,8 +40,8 @@ def google_routes_path() -> Path:
 def dependency() -> dict[str, object]:
     return {
         "path": str(google_routes_path()),
-        "skill_version": "1.0.0",
-        "cli_contract_version": "1.0.0",
+        "skill_version": "2.0.0",
+        "cli_contract_version": "2.0.0",
         "schema_version": "1",
         "travel_modes": ["DRIVE", "TWO_WHEELER"],
         "output_profile": "summary",
@@ -94,8 +93,8 @@ def capabilities_runner(
         json.dumps(
             {
                 "skill_name": "google-routes",
-                "skill_version": "1.0.0",
-                "cli_contract_version": "1.0.0",
+                "skill_version": "2.0.0",
+                "cli_contract_version": "2.0.0",
                 "schema_versions": ["1"],
                 "travel_modes": ["DRIVE", "TWO_WHEELER"],
                 "output_profiles": ["summary"],
@@ -145,14 +144,14 @@ class CommuteSmokeTests(unittest.TestCase):
             observed["skill_path"] = skill_path
             observed["query"] = json.loads(query_path.read_text(encoding="utf-8"))
             observed["query_path"] = query_path
-            observed["api_key"] = environ["GOOGLE_MAPS_API_KEY"]
+            observed["legacy_api_key_present"] = "GOOGLE_MAPS_API_KEY" in environ
             return (
                 0,
                 json.dumps(
                     {
                         "schema_version": "1",
                         "smoke_test": {
-                            "skill_version": "1.0.0",
+                            "skill_version": "2.0.0",
                             "status": "success",
                             "request_count": 2,
                             "results": [
@@ -183,7 +182,7 @@ class CommuteSmokeTests(unittest.TestCase):
                 ["--confirm-billable-smoke", str(input_path)],
                 stdout=stdout,
                 stderr=stderr,
-                environ={"GOOGLE_MAPS_API_KEY": TEST_API_KEY},
+                environ={},
                 now=NOW,
                 cwd=ROOT,
                 home=Path(directory),
@@ -199,7 +198,7 @@ class CommuteSmokeTests(unittest.TestCase):
             [(item["request_id"], item["travel_mode"]) for item in query["requests"]],
             [("smoke-two-wheeler", "TWO_WHEELER"), ("smoke-drive", "DRIVE")],
         )
-        self.assertEqual(observed["api_key"], TEST_API_KEY)
+        self.assertFalse(observed["legacy_api_key_present"])
         self.assertFalse(observed["query_path"].exists())
 
         evidence = json.loads(stdout.getvalue())
@@ -210,7 +209,7 @@ class CommuteSmokeTests(unittest.TestCase):
                 "smoke_test": {
                     "skill_name": "commute-analyzer",
                     "skill_version": "1.0.0",
-                    "google_routes_skill_version": "1.0.0",
+                    "google_routes_skill_version": "2.0.0",
                     "status": "success",
                     "request_count": 2,
                     "maximum_http_requests": 2,
@@ -223,7 +222,7 @@ class CommuteSmokeTests(unittest.TestCase):
             },
         )
         combined = stdout.getvalue() + stderr.getvalue()
-        for secret in (PRIVATE_ADDRESS, PRIVATE_COMPANY, "ChIJPrivateCompany", TEST_API_KEY):
+        for secret in (PRIVATE_ADDRESS, PRIVATE_COMPANY, "ChIJPrivateCompany"):
             self.assertNotIn(secret, combined)
 
     def test_plan_must_include_both_smoke_modes(self) -> None:
@@ -235,7 +234,7 @@ class CommuteSmokeTests(unittest.TestCase):
                 ["--confirm-billable-smoke", str(input_path)],
                 stdout=stdout,
                 stderr=io.StringIO(),
-                environ={"GOOGLE_MAPS_API_KEY": TEST_API_KEY},
+                environ={},
                 now=NOW,
                 cwd=ROOT,
                 home=Path(directory),
@@ -255,7 +254,7 @@ class CommuteSmokeTests(unittest.TestCase):
                     {
                         "schema_version": "1",
                         "smoke_test": {
-                            "skill_version": "1.0.0",
+                            "skill_version": "2.0.0",
                             "status": "success",
                             "request_count": 2,
                             "results": [
@@ -285,7 +284,7 @@ class CommuteSmokeTests(unittest.TestCase):
                 ["--confirm-billable-smoke", str(input_path)],
                 stdout=stdout,
                 stderr=io.StringIO(),
-                environ={"GOOGLE_MAPS_API_KEY": TEST_API_KEY},
+                environ={},
                 now=NOW,
                 cwd=ROOT,
                 home=Path(directory),
@@ -304,7 +303,7 @@ class CommuteSmokeTests(unittest.TestCase):
                     {
                         "schema_version": "1",
                         "smoke_test": {
-                            "skill_version": "1.0.0",
+                            "skill_version": "2.0.0",
                             "status": "degraded",
                             "request_count": 2,
                             "results": [
@@ -334,7 +333,7 @@ class CommuteSmokeTests(unittest.TestCase):
                 ["--confirm-billable-smoke", str(input_path)],
                 stdout=stdout,
                 stderr=io.StringIO(),
-                environ={"GOOGLE_MAPS_API_KEY": TEST_API_KEY},
+                environ={},
                 now=NOW,
                 cwd=ROOT,
                 home=Path(directory),
@@ -345,8 +344,26 @@ class CommuteSmokeTests(unittest.TestCase):
         self.assertEqual(exit_code, 3)
         self.assertEqual(json.loads(stdout.getvalue())["smoke_test"]["status"], "degraded")
 
-    def test_missing_api_key_stops_before_billable_runner(self) -> None:
+    def test_dependency_credential_error_is_sanitized(self) -> None:
         calls: list[str] = []
+
+        def missing_credentials(*args) -> tuple[int, str, str]:
+            calls.append("smoke")
+            return (
+                2,
+                json.dumps(
+                    {
+                        "schema_version": "1",
+                        "error": {
+                            "code": "credential_file_not_found",
+                            "path": "$credential_file",
+                            "message": "private credential detail",
+                        },
+                    }
+                ),
+                "private stderr detail",
+            )
+
         with tempfile.TemporaryDirectory() as directory:
             input_path = self._write_plan(Path(directory))
             stdout = io.StringIO()
@@ -359,12 +376,15 @@ class CommuteSmokeTests(unittest.TestCase):
                 cwd=ROOT,
                 home=Path(directory),
                 dependency_runner=capabilities_runner,
-                dependency_smoke_runner=lambda *args: calls.append("smoke"),
+                dependency_smoke_runner=missing_credentials,
             )
 
         self.assertEqual(exit_code, 2)
-        self.assertEqual(calls, [])
-        self.assertEqual(json.loads(stdout.getvalue())["error"]["code"], "MISSING_API_KEY")
+        self.assertEqual(calls, ["smoke"])
+        error = json.loads(stdout.getvalue())["error"]
+        self.assertEqual(error["code"], "SMOKE_EVIDENCE_INVALID")
+        self.assertNotIn("private credential detail", json.dumps(error))
+        self.assertNotIn("private stderr detail", json.dumps(error))
 
     def test_plan_inside_public_repository_is_rejected(self) -> None:
         stdout = io.StringIO()
@@ -375,7 +395,7 @@ class CommuteSmokeTests(unittest.TestCase):
             ],
             stdout=stdout,
             stderr=io.StringIO(),
-            environ={"GOOGLE_MAPS_API_KEY": TEST_API_KEY},
+            environ={},
             now=NOW,
             dependency_runner=capabilities_runner,
             dependency_smoke_runner=lambda *args: self.fail("不得執行 smoke"),

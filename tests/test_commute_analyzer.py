@@ -42,8 +42,8 @@ def private_config() -> dict[str, object]:
 def dependency() -> dict[str, object]:
     return {
         "path": "C:/skills/google-routes",
-        "skill_version": "1.0.0",
-        "cli_contract_version": "1.0.0",
+        "skill_version": "2.0.0",
+        "cli_contract_version": "2.0.0",
         "schema_version": "1",
         "travel_modes": ["DRIVE", "TWO_WHEELER"],
         "output_profile": "summary",
@@ -81,7 +81,7 @@ def route_result_for_plan(
         results.append(result)
     return {
         "schema_version": "1",
-        "cli_contract_version": "1.0.0",
+        "cli_contract_version": "2.0.0",
         "profile": "summary",
         "status": "success",
         "results": results,
@@ -112,8 +112,8 @@ class CapabilitiesTests(unittest.TestCase):
                 "schema_versions": ["1"],
                 "commands": ["capabilities", "plan", "run"],
                 "required_google_routes": {
-                    "skill_major": 1,
-                    "cli_contract_version": "1.0.0",
+                    "skill_major": 2,
+                    "cli_contract_version": "2.0.0",
                     "schema_version": "1",
                     "travel_modes": ["DRIVE", "TWO_WHEELER"],
                     "output_profile": "summary",
@@ -189,6 +189,24 @@ class DependencyTests(unittest.TestCase):
         self.assertEqual(context.exception.code, "GOOGLE_ROUTES_INCOMPATIBLE")
         self.assertIn("更新 google-routes", context.exception.message)
 
+    def test_google_routes_v1_is_rejected_before_planning(self) -> None:
+        capabilities = {
+            "skill_name": "google-routes",
+            "skill_version": "1.0.0",
+            "cli_contract_version": "1.0.0",
+            "schema_versions": ["1"],
+            "travel_modes": ["DRIVE", "TWO_WHEELER"],
+            "output_profiles": ["summary"],
+        }
+
+        with self.assertRaises(commute_analyzer.InputError) as context:
+            commute_analyzer.validate_google_routes_capabilities(
+                capabilities, Path("C:/skills/google-routes")
+            )
+
+        self.assertEqual(context.exception.code, "GOOGLE_ROUTES_INCOMPATIBLE")
+        self.assertIn("major 必須是 2", context.exception.message)
+
     def test_dependency_process_error_becomes_structured_cli_error(self) -> None:
         def dependency_runner(
             skill_path: Path,
@@ -239,8 +257,8 @@ class PlanTests(unittest.TestCase):
             config,
             {
                 "path": "/opt/skills/google-routes",
-                "skill_version": "1.0.0",
-                "cli_contract_version": "1.0.0",
+                "skill_version": "2.0.0",
+                "cli_contract_version": "2.0.0",
                 "schema_version": "1",
                 "travel_modes": ["DRIVE", "TWO_WHEELER"],
                 "output_profile": "summary",
@@ -301,8 +319,8 @@ class PlanTests(unittest.TestCase):
                 self.fail("plan 不得呼叫 google-routes query")
             return 0, json.dumps({
                 "skill_name": "google-routes",
-                "skill_version": "1.0.0",
-                "cli_contract_version": "1.0.0",
+                "skill_version": "2.0.0",
+                "cli_contract_version": "2.0.0",
                 "schema_versions": ["1"],
                 "travel_modes": ["DRIVE", "TWO_WHEELER"],
                 "output_profiles": ["summary"],
@@ -454,8 +472,8 @@ class RunTests(unittest.TestCase):
     def _compatible_capabilities() -> dict[str, object]:
         return {
             "skill_name": "google-routes",
-            "skill_version": "1.0.0",
-            "cli_contract_version": "1.0.0",
+            "skill_version": "2.0.0",
+            "cli_contract_version": "2.0.0",
             "schema_versions": ["1"],
             "travel_modes": ["DRIVE", "TWO_WHEELER"],
             "output_profiles": ["summary"],
@@ -475,13 +493,13 @@ class RunTests(unittest.TestCase):
             if command == "capabilities":
                 return 0, json.dumps({
                     "skill_name": "google-routes",
-                    "skill_version": "1.0.0",
-                    "cli_contract_version": "1.0.0",
+                    "skill_version": "2.0.0",
+                    "cli_contract_version": "2.0.0",
                     "schema_versions": ["1"],
                     "travel_modes": ["DRIVE", "TWO_WHEELER"],
                     "output_profiles": ["summary"],
                 }), ""
-            self.assertEqual(environ["GOOGLE_MAPS_API_KEY"], "test-only-key")
+            self.assertNotIn("GOOGLE_MAPS_API_KEY", environ)
             requests = payload["requests"]
             results = []
             for request in requests:
@@ -506,7 +524,7 @@ class RunTests(unittest.TestCase):
                 })
             return 0, json.dumps({
                 "schema_version": "1",
-                "cli_contract_version": "1.0.0",
+                "cli_contract_version": "2.0.0",
                 "profile": "summary",
                 "status": "success",
                 "results": results,
@@ -534,7 +552,6 @@ class RunTests(unittest.TestCase):
                 stdout=stdout,
                 stderr=stderr,
                 environ={
-                    "GOOGLE_MAPS_API_KEY": "test-only-key",
                     "GOOGLE_ROUTES_SKILL_DIR": str(google_routes),
                     "XDG_DATA_HOME": str(root / "data"),
                 },
@@ -593,7 +610,7 @@ class RunTests(unittest.TestCase):
             stdin=io.StringIO(json.dumps(plan)),
             stdout=stdout,
             stderr=io.StringIO(),
-            environ={"GOOGLE_MAPS_API_KEY": "test-only-key"},
+            environ={},
             now=datetime(2026, 9, 12, 12, 5, tzinfo=timezone.utc),
         )
 
@@ -650,7 +667,6 @@ class RunTests(unittest.TestCase):
                 stdout=stdout,
                 stderr=io.StringIO(),
                 environ={
-                    "GOOGLE_MAPS_API_KEY": "test-only-key",
                     "GOOGLE_ROUTES_SKILL_DIR": str(google_routes),
                     "XDG_DATA_HOME": str(root / "data"),
                 },
@@ -665,7 +681,7 @@ class RunTests(unittest.TestCase):
         self.assertEqual(calls, ["capabilities", "query"])
         self.assertEqual(json.loads(stdout.getvalue())["request_summary"]["planned"], 40)
 
-    def test_missing_api_key_stops_before_query(self) -> None:
+    def test_dependency_credential_error_is_sanitized(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             google_routes = root / "google-routes"
@@ -688,7 +704,18 @@ class RunTests(unittest.TestCase):
             ) -> tuple[int, str, str]:
                 del skill_path, payload, environ
                 calls.append(command)
-                return 0, json.dumps(self._compatible_capabilities()), ""
+                if command == "capabilities":
+                    return 0, json.dumps(self._compatible_capabilities()), ""
+                return 2, json.dumps(
+                    {
+                        "schema_version": "1",
+                        "error": {
+                            "code": "credential_file_not_found",
+                            "path": "$credential_file",
+                            "message": "private credential detail",
+                        },
+                    }
+                ), "private stderr detail"
 
             stdout = io.StringIO()
             exit_code = commute_analyzer.run_cli(
@@ -705,8 +732,11 @@ class RunTests(unittest.TestCase):
             )
 
         self.assertEqual(exit_code, 2)
-        self.assertEqual(calls, ["capabilities"])
-        self.assertEqual(json.loads(stdout.getvalue())["error"]["code"], "MISSING_API_KEY")
+        self.assertEqual(calls, ["capabilities", "query"])
+        error = json.loads(stdout.getvalue())["error"]
+        self.assertEqual(error["code"], "GOOGLE_ROUTES_EXECUTION_FAILED")
+        self.assertNotIn("private credential detail", json.dumps(error))
+        self.assertNotIn("private stderr detail", json.dumps(error))
 
     def test_run_does_not_execute_dependency_path_supplied_only_by_plan(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -739,7 +769,7 @@ class RunTests(unittest.TestCase):
                 stdin=io.StringIO(json.dumps(plan)),
                 stdout=stdout,
                 stderr=io.StringIO(),
-                environ={"GOOGLE_MAPS_API_KEY": "test-only-key"},
+                environ={},
                 cwd=root / "project",
                 home=root / "home",
                 platform_name="linux",

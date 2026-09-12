@@ -76,10 +76,10 @@ def validate_google_routes_capabilities(
             major = int(first)
     if capabilities_value.get("skill_name") != "google-routes":
         problems.append("skill_name 必須是 google-routes")
-    if major != 1:
-        problems.append("skill_version major 必須是 1")
-    if capabilities_value.get("cli_contract_version") != "1.0.0":
-        problems.append("cli_contract_version 必須是 1.0.0")
+    if major != 2:
+        problems.append("skill_version major 必須是 2")
+    if capabilities_value.get("cli_contract_version") != "2.0.0":
+        problems.append("cli_contract_version 必須是 2.0.0")
     if "1" not in _string_list(capabilities_value.get("schema_versions")):
         problems.append("必須支援 schema version 1")
     modes = set(_string_list(capabilities_value.get("travel_modes")))
@@ -98,7 +98,7 @@ def validate_google_routes_capabilities(
     return {
         "path": str(dependency_path.resolve()),
         "skill_version": skill_version,
-        "cli_contract_version": "1.0.0",
+        "cli_contract_version": "2.0.0",
         "schema_version": "1",
         "travel_modes": ["DRIVE", "TWO_WHEELER"],
         "output_profile": "summary",
@@ -759,8 +759,8 @@ def capabilities() -> dict[str, object]:
         "schema_versions": ["1"],
         "commands": ["capabilities", "plan", "run"],
         "required_google_routes": {
-            "skill_major": 1,
-            "cli_contract_version": "1.0.0",
+            "skill_major": 2,
+            "cli_contract_version": "2.0.0",
             "schema_version": "1",
             "travel_modes": ["DRIVE", "TWO_WHEELER"],
             "output_profile": "summary",
@@ -938,12 +938,6 @@ def run_cli(
                     "google-routes 能力或路徑已改變；請重新執行 plan",
                     "$.dependency",
                 )
-            if not environment.get("GOOGLE_MAPS_API_KEY"):
-                raise InputError(
-                    "MISSING_API_KEY",
-                    "尚未設定 GOOGLE_MAPS_API_KEY；請勿把 key 寫入檔案或命令輸出",
-                    "$environment.GOOGLE_MAPS_API_KEY",
-                )
             query = _route_query_from_plan(plan)
             query_exit, query_stdout, _ = _call_dependency(
                 runner, dependency_path, "query", query, environment
@@ -1041,7 +1035,7 @@ def analyze_route_results(
     schedule = _require_object(plan.get("schedule"), "$.schedule")
     weeks = _bounded_int(schedule.get("weeks"), "$.schedule.weeks", 1, 4)
     route = _require_object(route_value, "$route_result")
-    if route.get("schema_version") != "1" or route.get("cli_contract_version") != "1.0.0":
+    if route.get("schema_version") != "1" or route.get("cli_contract_version") != "2.0.0":
         raise InputError(
             "GOOGLE_ROUTES_RESULT_INCOMPATIBLE",
             "google-routes result contract 不相容",

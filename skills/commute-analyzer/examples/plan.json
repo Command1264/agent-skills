@@ -4,8 +4,8 @@
   "created_at": "2026-09-12T12:00:00+00:00",
   "dependency": {
     "path": "/opt/skills/google-routes",
-    "skill_version": "1.0.0",
-    "cli_contract_version": "1.0.0",
+    "skill_version": "2.0.0",
+    "cli_contract_version": "2.0.0",
     "schema_version": "1",
     "travel_modes": ["DRIVE", "TWO_WHEELER"],
     "output_profile": "summary"
@@ -89,5 +89,5 @@
       "departure_time": "2026-09-14T18:00:00+08:00"
     }
   ],
-  "plan_id": "sha256:60f4e81861e1850bb351e4a8a3a0e98328228a18f39a024a06d0b7ab532c6814"
+  "plan_id": "sha256:d0d1a45fccd74c04476326860b0e96070e17a9f131ed61fb522d7eb9a65b4995"
 }
