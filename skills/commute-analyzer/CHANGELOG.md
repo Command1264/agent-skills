@@ -2,7 +2,7 @@
 
 所有值得注意的變更都記錄在此。版本遵循 Semantic Versioning。
 
-## [Unreleased]
+## [1.0.0] - 2026-09-13
 
 ### Added
 
