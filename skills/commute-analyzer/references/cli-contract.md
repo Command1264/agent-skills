@@ -24,8 +24,8 @@ stdin 必須是先前 `plan` 產生且未修改、未到期的 plan。`request_c
 
 1. 驗證 plan 結構、一致性、雜湊與未來時間。
 2. 驗證 plan 記錄的 dependency path 與目前 capabilities。
-3. 驗證 `GOOGLE_MAPS_API_KEY`。
-4. 將 plan 樣本轉為 `google-routes` `summary` query。
+3. 將 plan 樣本轉為 `google-routes` `summary` query；credential 由 dependency 內部解析。
+4. 將 dependency 的去識別化 credential／query 錯誤轉為本 Skill 的結構化失敗。
 5. 分析結果，寫入私人報告與 append-only ledger。
 
 `TWO_WHEELER` 只有全部必要樣本皆為 `success` 時才完整；`degraded` 不算必要成功。
@@ -37,7 +37,7 @@ stdin 必須是先前 `plan` 產生且未修改、未到期的 plan。`request_c
 | Code | 意義 |
 | --- | --- |
 | `0` | 全部樣本成功 |
-| `2` | 使用方式、輸入、設定、plan、dependency 或 key 錯誤；未執行 query 或沒有可分析結果 |
+| `2` | 使用方式、輸入、設定、plan 或 dependency credential／query 錯誤；未執行 query 或沒有可分析結果 |
 | `3` | 部分成功或含降級結果；報告仍已產生 |
 | `4` | 所有樣本失敗；報告仍已產生 |
 

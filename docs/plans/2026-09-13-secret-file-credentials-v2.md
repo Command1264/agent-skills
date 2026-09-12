@@ -27,11 +27,12 @@ Issue #3 已在 2026-09-13 更新 credential 驗收條件；其他既有通勤�
 
 | 平台 | 預設路徑 |
 | --- | --- |
-| Windows | `%LOCALAPPDATA%\command1264-skills\credentials\google-routes.toml` |
+| Windows | `%USERPROFILE%\.config\command1264-skills\credentials\google-routes.toml` |
 | macOS | `~/Library/Application Support/command1264-skills/credentials/google-routes.toml` |
 | Linux | `${XDG_CONFIG_HOME:-~/.config}/command1264-skills/credentials/google-routes.toml` |
 
 - v2 不提供 credential path 的環境變數或命令列 override，避免 secret 散落到 repository、Skill 目錄或臨時路徑。
+- Windows 不使用 AppData；Microsoft Store Python 的 MSIX 重導可能讓相同 AppData 文字路徑指向 runtime 私有副本。已在同一 Windows 主機驗證使用者主目錄檔案可同時由 WindowsApps Python 與 Codex bundled Python 讀取。
 - 缺少平台必要的使用者目錄資訊時 fail-closed，錯誤須指出應修復的系統設定，但不得猜測或退回目前工作目錄。
 - `credentials path` 可顯示解析後路徑，方便使用者找到檔案；這個命令不讀 key、不呼叫 Google API。
 
@@ -89,7 +90,7 @@ api_key = "<Google Maps Platform API key>"
 
 - 只允許互動式 TTY；使用 Python `getpass` 隱藏輸入，不接受命令列 `--api-key`。
 - 建立父目錄後，在同一目錄寫入權限受限的暫存檔，flush 後以 `os.replace` 原子替換。
-- POSIX 建立檔案時使用 `0600`。Windows 放在目前使用者的 Local AppData 並繼承使用者 profile ACL；檢查到明顯過寬權限時警告或拒絕，但不宣稱純標準函式庫能完整重寫 Windows ACL。
+- POSIX 建立檔案時使用 `0600`。Windows 放在目前使用者主目錄的 `.config` 並繼承 user-profile ACL；不宣稱純標準函式庫能完整重寫 Windows ACL。
 - 成功訊息只顯示檔案路徑與 schema version。更新失敗時保留既有有效檔案，清除本次建立的精確暫存檔。
 - 文件同時提供手動建立 TOML 的方式，讓不方便使用互動式命令的使用者仍可重現設定。
 - 即使舊環境變數仍存在也允許執行，因為這是完成遷移所需的管理操作；寫入內容只能來自本次隱藏輸入，絕不從舊變數複製。
@@ -107,6 +108,7 @@ api_key = "<Google Maps Platform API key>"
 | `credential_file_too_large` | 檔案超過 8 KiB | 只保留 schema 與 key |
 | `credential_file_invalid` | TOML 或 schema 不合法 | 依範例修正檔案 |
 | `credential_file_permissions_unsafe` | 權限明顯過寬 | 收緊權限後重試 |
+| `credential_interactive_required` | `credentials set` 不是在互動式終端執行 | 改由使用者在終端執行 |
 | `credential_update_failed` | 安全寫入或替換失敗 | 保留舊檔，依不含 secret 的診斷修復 |
 
 錯誤中只允許標準路徑、欄位名稱與修復指引，不得包含 key、原始檔案內容、私有地址或 provider response。

@@ -20,5 +20,9 @@ capabilities；路徑或能力改變就拒絕舊 plan。
 npx skills add Command1264/agent-skills --skill google-routes
 ```
 
-必要能力為：Skill major `1`、CLI contract `1.0.0`、schema `1`、`summary` profile，
+必要能力為：Skill major `2`、CLI contract `2.0.0`、schema `1`、`summary` profile，
 以及 `DRIVE`、`TWO_WHEELER`。不相容時使用同一命令更新，再重新建立 plan。
+
+`commute-analyzer` 不解析 dependency 的 credential，也不把 API key 放進 subprocess argument
+或 environment。請先從解析到的 `google-routes` 目錄執行 `credentials check`；credential
+錯誤由 provider Skill fail-closed。

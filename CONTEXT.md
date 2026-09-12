@@ -105,7 +105,7 @@ _避免使用_：路線快取、通勤歷史、原始 response log
 _避免使用_：repository 報告、歷史實測、完整地址檔名
 
 **私人通勤設定（Private Commute Configuration）**：
-存放於作業系統標準使用者設定目錄的通勤設定檔。Windows 使用 `%APPDATA%\command1264-skills\commute-analyzer\config.json`，macOS 使用 `~/Library/Application Support/command1264-skills/commute-analyzer/config.json`，Linux 使用 `${XDG_CONFIG_HOME:-~/.config}/command1264-skills/commute-analyzer/config.json`；`COMMUTE_ANALYZER_CONFIG` 可明確覆寫位置。Google API key 只由 `GOOGLE_MAPS_API_KEY` 環境變數提供；公開 repository、輸出與一般 log 均不得包含私人地址或 secret。
+存放於作業系統標準使用者設定目錄的通勤設定檔。Windows 使用 `%APPDATA%\command1264-skills\commute-analyzer\config.json`，macOS 使用 `~/Library/Application Support/command1264-skills/commute-analyzer/config.json`，Linux 使用 `${XDG_CONFIG_HOME:-~/.config}/command1264-skills/commute-analyzer/config.json`；`COMMUTE_ANALYZER_CONFIG` 可明確覆寫位置。此檔不得包含 API key；Google credential 由 `google-routes` v2 自己的使用者層級 TOML secret file 擁有、解析與使用。公開 repository、輸出與一般 log 均不得包含私人地址或 secret。
 _避免使用_：repository 設定、公開範例設定
 
 **公司設定（Company Configuration）**：

@@ -11,7 +11,7 @@ Repository foundation 與第一個穩定 Skill 已發布。
 
 | Skill | 用途 | 狀態 |
 | --- | --- | --- |
-| `google-routes` | 封裝 Google Routes API，輸出穩定 JSON | v1.0.0 |
+| `google-routes` | 封裝 Google Routes API，輸出穩定 JSON | v2.0.0 開發中；穩定版 v1.0.0 |
 | `commute-analyzer` | 以未來工作日樣本估算並比較住家與公司的通勤時間 | v1 開發中，尚未發布 |
 
 ## 安裝
@@ -26,8 +26,9 @@ npx skills add Command1264/agent-skills --skill google-routes
 缺少依賴時會停止並顯示上述安裝命令，不會靜默安裝。
 
 安裝 Skill 不會呼叫 Google API。真實路線查詢另需 Python 3.11 以上、已啟用 billing
-與 Routes API 的 Google Cloud project，以及透過 `GOOGLE_MAPS_API_KEY` 提供的受限
-API key；成本、quota 與安全設定請以 Google Cloud Console 為準。
+與 Routes API 的 Google Cloud project，以及受限 API key。目前 `main` 上的穩定版 v1
+仍使用 `GOOGLE_MAPS_API_KEY`；`develop` 中的 v2 改用使用者層級 TOML secret file，且不
+支援環境變數 fallback。成本、quota 與安全設定請以 Google Cloud Console 為準。
 
 ## Repository 結構
 
