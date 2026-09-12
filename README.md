@@ -12,16 +12,18 @@ Repository foundation 與第一個穩定 Skill 已發布。
 | Skill | 用途 | 狀態 |
 | --- | --- | --- |
 | `google-routes` | 封裝 Google Routes API，輸出穩定 JSON | v1.0.0 |
-| `commute-analyzer` | 以一週未來樣本估算住家與公司的通勤時間 | 規劃完成，尚未實作 |
+| `commute-analyzer` | 以未來工作日樣本估算並比較住家與公司的通勤時間 | v1 開發中，尚未發布 |
 
 ## 安裝
 
-使用 [`npx skills add`](https://github.com/vercel-labs/skills) 選擇並安裝
-`google-routes`：
+使用 [`npx skills add`](https://github.com/vercel-labs/skills) 選擇並安裝 Skill：
 
 ```powershell
 npx skills add Command1264/agent-skills --skill google-routes
 ```
+
+`commute-analyzer` 發布後可獨立選擇安裝，但執行時仍需要相容的 `google-routes`；
+缺少依賴時會停止並顯示上述安裝命令，不會靜默安裝。
 
 安裝 Skill 不會呼叫 Google API。真實路線查詢另需 Python 3.11 以上、已啟用 billing
 與 Routes API 的 Google Cloud project，以及透過 `GOOGLE_MAPS_API_KEY` 提供的受限

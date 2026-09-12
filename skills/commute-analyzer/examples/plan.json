@@ -1,0 +1,93 @@
+{
+  "schema_version": "1",
+  "plan_contract_version": "1.0.0",
+  "created_at": "2026-09-12T12:00:00+00:00",
+  "dependency": {
+    "path": "/opt/skills/google-routes",
+    "skill_version": "1.0.0",
+    "cli_contract_version": "1.0.0",
+    "schema_version": "1",
+    "travel_modes": ["DRIVE", "TWO_WHEELER"],
+    "output_profile": "summary"
+  },
+  "schedule": {
+    "start_date": "2026-09-14",
+    "end_date": "2026-09-20",
+    "weeks": 1,
+    "weekdays": [1],
+    "dates": ["2026-09-14"],
+    "utc_offset": "+08:00",
+    "morning_departure_time": "08:00",
+    "evening_departure_time": "18:00",
+    "travel_modes": ["TWO_WHEELER", "DRIVE"]
+  },
+  "preview": {
+    "company_count": 1,
+    "request_count": 4,
+    "retry_limit": 2,
+    "maximum_http_requests": 12,
+    "rate_limit_qpm": 60,
+    "local_rate_limit_only": true,
+    "confirmation_threshold": 20,
+    "confirmation_required": false,
+    "estimated_sku_requests": {
+      "routes_compute_pro": 2,
+      "routes_compute_enterprise": 2
+    }
+  },
+  "samples": [
+    {
+      "request_id": "example-co.20260914.outbound.two-wheeler",
+      "company_id": "example-co",
+      "company_name": "Example Co",
+      "date": "2026-09-14",
+      "direction": "outbound",
+      "origin_label": "home",
+      "destination_label": "example-co",
+      "origin": {"address": "1 Example Road, Example City"},
+      "destination": {"place_id": "ChIJExampleCompany"},
+      "travel_mode": "TWO_WHEELER",
+      "departure_time": "2026-09-14T08:00:00+08:00"
+    },
+    {
+      "request_id": "example-co.20260914.outbound.drive",
+      "company_id": "example-co",
+      "company_name": "Example Co",
+      "date": "2026-09-14",
+      "direction": "outbound",
+      "origin_label": "home",
+      "destination_label": "example-co",
+      "origin": {"address": "1 Example Road, Example City"},
+      "destination": {"place_id": "ChIJExampleCompany"},
+      "travel_mode": "DRIVE",
+      "departure_time": "2026-09-14T08:00:00+08:00"
+    },
+    {
+      "request_id": "example-co.20260914.return.two-wheeler",
+      "company_id": "example-co",
+      "company_name": "Example Co",
+      "date": "2026-09-14",
+      "direction": "return",
+      "origin_label": "example-co",
+      "destination_label": "home",
+      "origin": {"place_id": "ChIJExampleCompany"},
+      "destination": {"address": "1 Example Road, Example City"},
+      "travel_mode": "TWO_WHEELER",
+      "departure_time": "2026-09-14T18:00:00+08:00"
+    },
+    {
+      "request_id": "example-co.20260914.return.drive",
+      "company_id": "example-co",
+      "company_name": "Example Co",
+      "date": "2026-09-14",
+      "direction": "return",
+      "origin_label": "example-co",
+      "destination_label": "home",
+      "origin": {"place_id": "ChIJExampleCompany"},
+      "destination": {"address": "1 Example Road, Example City"},
+      "travel_mode": "DRIVE",
+      "departure_time": "2026-09-14T18:00:00+08:00"
+    }
+  ],
+  "plan_id": "sha256:60f4e81861e1850bb351e4a8a3a0e98328228a18f39a024a06d0b7ab532c6814"
+}
