@@ -27,17 +27,20 @@ TEST_KEY = "test-only-key-material"
 
 class CredentialPathTests(unittest.TestCase):
     def test_windows_path_avoids_packaged_python_appdata_virtualization(self) -> None:
+        home = Path("example-user-home")
         path = credentials.default_credentials_path(
             platform_name="win32",
             environ={"LOCALAPPDATA": r"C:\Users\example\AppData\Local"},
-            home=Path(r"C:\Users\example"),
+            home=home,
         )
 
         self.assertEqual(
             path,
-            Path(
-                r"C:\Users\example\.config\command1264-skills\credentials\google-routes.toml"
-            ),
+            home
+            / ".config"
+            / "command1264-skills"
+            / "credentials"
+            / "google-routes.toml",
         )
         self.assertNotIn("AppData", str(path))
 
