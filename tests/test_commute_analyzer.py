@@ -46,6 +46,7 @@ class CliEncodingTests(unittest.TestCase):
             0,
             completed.stderr.decode("utf-8", errors="replace"),
         )
+        self.assertTrue(all(byte < 128 for byte in completed.stdout))
         result = json.loads(completed.stdout.decode("utf-8"))
         self.assertEqual(result["schema_version"], "2")
         self.assertEqual(result["preview"]["journey_count"], 2)

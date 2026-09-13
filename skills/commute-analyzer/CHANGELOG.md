@@ -24,8 +24,9 @@
 
 ### Fixed
 
-- 修正 Windows PowerShell 以 UTF-8 native pipe 傳入含中文的 plan request 時，Python 可能依系統
-  code page 解碼並在計算 `plan_id` 時觸發 `UnicodeEncodeError`；CLI 現在明確固定 UTF-8 stdio。
+- 修正 Windows PowerShell 與 Python 使用不同 native pipe／Console encoding 時，中文 plan request 可能
+  在計算 `plan_id` 時觸發 `UnicodeEncodeError`，或 stdout 無法由 `ConvertFrom-Json` 解析；CLI 現在
+  明確固定 UTF-8 stdio，並以 ASCII-safe JSON escapes 跨 code page 傳遞非 ASCII 內容。
 
 ### Development status
 

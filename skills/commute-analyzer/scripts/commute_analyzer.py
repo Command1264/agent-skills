@@ -1592,7 +1592,7 @@ def capabilities() -> dict[str, object]:
 
 
 def _write_json(stream: TextIO, value: object) -> None:
-    json.dump(value, stream, ensure_ascii=False, separators=(",", ":"))
+    json.dump(value, stream, ensure_ascii=True, separators=(",", ":"))
     stream.write("\n")
 
 

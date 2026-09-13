@@ -1,7 +1,8 @@
 # CLI contract v2.0.0
 
-CLI 使用 Python 3.11+、UTF-8 JSON 與 stdin/stdout。stdout 永遠只有一個 JSON value；人類可讀
-診斷只寫 stderr。`commute-analyzer` 不讀取或傳遞 Google API key。
+CLI 使用 Python 3.11+、UTF-8 JSON 與 stdin/stdout。stdout 永遠只有一個 JSON value；非 ASCII 字元
+使用標準 JSON escape，避免 Windows native pipe 與 Console code page 不一致時破壞 JSON；解析後仍為
+原始 Unicode 文字。人類可讀診斷只寫 stderr。`commute-analyzer` 不讀取或傳遞 Google API key。
 
 ## `capabilities`
 
