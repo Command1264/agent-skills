@@ -17,11 +17,15 @@
 - `capabilities` 與 `config check` 升級為 v2 planning contract，並要求 `google-routes` 提供 schema v2、
   `itinerary_summary` 與固定順序 waypoint 能力。
 - v2 runtime 將既有 plan v1 視為必須重新離線產生。
+- `run` 改為逐 sample 查詢 itinerary v2，驗證 Points／legs／totals 後，以 Journey 產生方向、每日來回、
+  每週與四週統計及排名。
+- 私人 JSON／Markdown 報告與 usage ledger 升級為 v2；報告保留 labels 與 legs，不保存位置或 provider
+  point Place ID；Markdown 會轉義自訂 label，避免被解讀為連結、圖片或額外段落。
 
 ### Development status
 
-- 本候選分支只完成 Issue #20 階段 2B 的離線 planning path；plan v2 的 `run`、分析、私人產物與
-  release smoke 必須在階段 2C 完成並通過完整測試後，才能發布 v2.0.0。
+- Issue #20 階段 2A–2C 已完成本機 schema、planning、run、分析、私人產物與 mock E2E；正式
+  v2.0.0 仍須完成獨立的真實 API smoke 與發布驗收。
 
 ## [1.1.0] - 2026-09-13
 

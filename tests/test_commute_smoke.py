@@ -40,11 +40,17 @@ def google_routes_path() -> Path:
 def dependency() -> dict[str, object]:
     return {
         "path": str(google_routes_path()),
-        "skill_version": "2.0.0",
+        "skill_version": "2.1.0",
         "cli_contract_version": "2.0.0",
-        "schema_version": "1",
+        "schema_version": "2",
         "travel_modes": ["DRIVE", "TWO_WHEELER"],
-        "output_profile": "summary",
+        "output_profile": "itinerary_summary",
+        "itinerary_limits": {
+            "minimum_points": 2,
+            "maximum_points": 12,
+            "maximum_intermediate_waypoints": 10,
+            "waypoint_order": "fixed",
+        },
     }
 
 
@@ -93,11 +99,19 @@ def capabilities_runner(
         json.dumps(
             {
                 "skill_name": "google-routes",
-                "skill_version": "2.0.0",
+                "skill_version": "2.1.0",
                 "cli_contract_version": "2.0.0",
-                "schema_versions": ["1"],
+                "schema_versions": ["1", "2"],
                 "travel_modes": ["DRIVE", "TWO_WHEELER"],
-                "output_profiles": ["summary"],
+                "output_profiles": ["summary", "itinerary_summary"],
+                "itinerary_limits": {
+                    "minimum_points": 2,
+                    "maximum_points": 12,
+                    "maximum_intermediate_waypoints": 10,
+                    "waypoint_order": "fixed",
+                    "intermediate_type": "stopover",
+                    "optimization_supported": False,
+                },
             }
         ),
         "",
@@ -151,7 +165,7 @@ class CommuteSmokeTests(unittest.TestCase):
                     {
                         "schema_version": "1",
                         "smoke_test": {
-                            "skill_version": "2.0.0",
+                            "skill_version": "2.1.0",
                             "status": "success",
                             "request_count": 2,
                             "results": [
@@ -192,7 +206,7 @@ class CommuteSmokeTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         query = observed["query"]
-        self.assertEqual(query["profile"], "summary")
+        self.assertEqual(query["profile"], "itinerary_summary")
         self.assertEqual(len(query["requests"]), 2)
         self.assertEqual(
             [(item["request_id"], item["travel_mode"]) for item in query["requests"]],
@@ -205,11 +219,11 @@ class CommuteSmokeTests(unittest.TestCase):
         self.assertEqual(
             evidence,
             {
-                "schema_version": "1",
+                "schema_version": "2",
                 "smoke_test": {
                     "skill_name": "commute-analyzer",
-                    "skill_version": "1.1.0",
-                    "google_routes_skill_version": "2.0.0",
+                    "skill_version": "2.0.0",
+                    "google_routes_skill_version": "2.1.0",
                     "status": "success",
                     "request_count": 2,
                     "maximum_http_requests": 2,
@@ -254,7 +268,7 @@ class CommuteSmokeTests(unittest.TestCase):
                     {
                         "schema_version": "1",
                         "smoke_test": {
-                            "skill_version": "2.0.0",
+                            "skill_version": "2.1.0",
                             "status": "success",
                             "request_count": 2,
                             "results": [
@@ -303,7 +317,7 @@ class CommuteSmokeTests(unittest.TestCase):
                     {
                         "schema_version": "1",
                         "smoke_test": {
-                            "skill_version": "2.0.0",
+                            "skill_version": "2.1.0",
                             "status": "degraded",
                             "request_count": 2,
                             "results": [

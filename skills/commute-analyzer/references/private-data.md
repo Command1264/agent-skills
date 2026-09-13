@@ -29,10 +29,13 @@ virtualization 可能讓 PowerShell 與 Python 看到相同字串、不同實體
 ## 資料分類
 
 - 私人設定與 plan：含完整位置，不得 commit、貼入 Issue／PR 或公開 log。
+- v2 inline location：只存在於本次私人 request／plan；程式不會加入 Named Location Catalog 或改寫 config。
+- v1 config：仍可唯讀搭配 request v1 產生 plan v2；`schema_migration` 只提供人工遷移提示。
 - Google Maps API key：只由 `google-routes` v2 的使用者層級 TOML secret file 保存與解析；
   不得寫入 commute config、plan、報告、ledger、subprocess argument 或 environment。
 - JSON／Markdown 報告：只保存 label、日期、秒數、狀態、統計與去識別錯誤；不保存完整位置。
+  Markdown 顯示會轉義自訂 label，避免將內容解讀為外部圖片、連結或額外段落。
 - `usage.jsonl`：append-only，每行只記錄 plan ID、時間、request／retry 數、模式與 SKU 計數。
 - provider raw response：只在程序記憶體中由 `google-routes` 正規化，不由本 Skill 持久化。
 
-plan 與報告均屬私人產物。若要分享，先人工檢查公司名稱與 label 是否仍能識別個人。
+plan 與報告均屬私人產物。若要分享，先人工檢查 Journey 與 Point labels 是否仍能識別個人。

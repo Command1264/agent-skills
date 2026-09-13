@@ -1,65 +1,69 @@
-# CLI contract v1.0.0
+# CLI contract v2.0.0
 
-CLI 使用 Python 3.11+、UTF-8 JSON 與 stdin/stdout。stdout 永遠只有一個 JSON value；
-人類可讀診斷只寫 stderr。
+CLI 使用 Python 3.11+、UTF-8 JSON 與 stdin/stdout。stdout 永遠只有一個 JSON value；人類可讀
+診斷只寫 stderr。`commute-analyzer` 不讀取或傳遞 Google API key。
 
 ## `capabilities`
 
-完全離線，exit `0`。輸出 Skill／CLI 版本、支援命令、預設值及要求的 `google-routes` 能力。
+完全離線，exit `0`。分開回報 config、plan request、plan 與 result 支援版本，並聲明要求
+`google-routes` schema v2、`itinerary_summary`、2–12 Points、最多 10 個 intermediates 與 fixed order。
 
 ## `config path`
 
-完全離線，exit `0`。輸出目前選用的 config path、新跨 runtime 預設路徑、來源、是否存在、
-是否需要人工遷移，以及 Windows 舊 AppData 路徑。命令不讀取或回傳設定內容。
-
-解析優先序為 `COMMUTE_ANALYZER_CONFIG`、存在的新預設 config、目前 runtime 可見的舊
-Windows AppData config，最後是尚未建立的新預設路徑。使用 legacy config 時輸出
-`legacy_windows_appdata_path` warning，但不自動搬移檔案。
+完全離線，exit `0`。只輸出目前選用的 config path、跨 runtime 預設路徑、來源、存在狀態及
+Windows 舊 AppData 遷移提示，不讀取設定內容。解析優先序為 `COMMUTE_ANALYZER_CONFIG`、存在的新
+預設 config、目前 runtime 可見的舊 Windows AppData config，最後是尚未建立的新預設路徑。
 
 ## `config check`
 
-完全離線。使用與 `config path` 相同的解析規則讀取並嚴格驗證 config；成功 exit `0`，只在
-metadata 增加 `content_schema_version`，不回傳地址、公司或其他私人內容。找不到檔案或內容
-無效時 exit `2` 並輸出結構化錯誤。
+完全離線。接受 config v1 或 v2，嚴格驗證後只增加 `content_schema_version` 與不含內容的
+`schema_migration` metadata。v1 仍可使用；`recommended: true` 只表示建議人工遷移，程式不會改寫、
+複製或搬移私人設定。找不到檔案或內容無效時 exit `2`。
 
 ## `plan [--config PATH]`
 
-stdin 是 `plan-request-v1`。未傳 `--config` 時使用預設私人 config path。只會呼叫
-`google-routes capabilities`，不會執行 `query` 或發出 Routes API request。
+stdin 必須是 `plan-request-v1` 或 `plan-request-v2`，且與 config 使用相同 schema version：
 
-成功輸出不可變的 `plan-v1`，其中 `plan_id` 是排除該欄位後，以排序 key、無多餘空白的
-UTF-8 JSON 計算 SHA-256。這是完整 plan 的確認 token，不是密碼學簽章；`run` 仍會嚴格驗證內容。
-`rate_limit_qpm` 是傳給 `google-routes` 的本機上限；執行者仍須在 Google Cloud Console
-確認實際 quota，避免把 `429` 當作正常節流機制。
+- v1 + v1 經 Compatibility Adapter 正規化為 Journeys。
+- v2 + v2 解析 Named Locations、inline locations、outbound 及 return Points。
+- 跨版本組合以 `INCOMPATIBLE_INPUT_SCHEMA_VERSIONS` 拒絕。
+
+`plan` 只呼叫 `google-routes capabilities`，不讀取 credential、不執行 `query`。兩種輸入都輸出唯一的
+plan v2；`reverse_outbound` 已展開為完整 Points。`plan_id` 是排除該欄位後，以排序 key、無多餘空白
+的 UTF-8 JSON 計算 SHA-256。Plan 含完整私人位置，必須保存在 repository 與 Skill 目錄外。
+
+Preview 分開顯示 Journey 數、Compute Routes request 數、route leg 數、最大 HTTP request、推定 SKU、
+labels 與本機 QPM；不顯示 address 或 Place ID。本機 QPM 不是 Google Cloud quota 或帳單保證。
 
 ## `run [--confirm-plan-id ID] [--output-dir PATH]`
 
-stdin 必須是先前 `plan` 產生且未修改、未到期的 plan。`request_count` 大於 plan 中的
-`confirmation_threshold` 時，`--confirm-plan-id` 必須與完整 `plan_id` 相同。執行順序是：
+stdin 必須是未修改、未過期的 plan v2。plan v1 會在 dependency discovery、credential、API request 與
+輸出寫入前以 `LEGACY_PLAN_REQUIRES_REGENERATION` 拒絕。request 數大於
+`confirmation_threshold` 時，`--confirm-plan-id` 必須等於完整 `plan_id`。
 
-1. 驗證 plan 結構、一致性、雜湊與未來時間。
-2. 驗證 plan 記錄的 dependency path 與目前 capabilities。
-3. 將 plan 樣本轉為 `google-routes` `summary` query；credential 由 dependency 內部解析。
-4. 將 dependency 的去識別化 credential／query 錯誤轉為本 Skill 的結構化失敗。
-5. 分析結果，寫入私人報告與 append-only ledger。
+執行順序：
 
-`TWO_WHEELER` 只有全部必要樣本皆為 `success` 時才完整；`degraded` 不算必要成功。
-查詢超過一週時，`weekly_total_seconds` 是所有完整取樣週合計的每週平均；
-`four_week_month_estimate_seconds` 再以該值乘四，不是日曆月實測。
+1. 驗證 plan schema、hash、期限、sample matrix、預覽數學及確認 token。
+2. 重新解析並比對 `google-routes` path 與 itinerary capabilities。
+3. 每個 sample 映射為一筆 query v2 request，保持完整 Points 順序、mode、departure time 與 QPM。
+4. 驗證 result 的 request IDs、Points、legs、labels、totals 與 plan 一致；不相容時不猜測對應。
+5. 以 Journey 為單位計算方向、每日來回、每週與四週估算，寫入私人 JSON／Markdown 與 usage ledger。
+
+只有 `success` 樣本計入完整性與統計；`degraded`／fallback 保留但不算必要成功。`TWO_WHEELER` 全部必要
+樣本成功的 Journey 才參與排名；未要求機車時 ranking 為空。多週結果先除以取樣週數，再乘四產生
+四週估算。
+
+報告保存 labels、legs 與統計，不保存 input address、input Place ID、provider point Place ID 或 raw
+response。Ledger 只保存執行時間、plan ID、request／retry／狀態、modes 與推定 SKU。
 
 ## Exit code
 
 | Code | 意義 |
-| --- | --- |
+| ---: | --- |
 | `0` | 全部樣本成功 |
-| `2` | 使用方式、輸入、設定、plan 或 dependency credential／query 錯誤；未執行 query 或沒有可分析結果 |
-| `3` | 部分成功或含降級結果；報告仍已產生 |
+| `2` | 使用方式、輸入、設定、plan、dependency 或 credential／query contract 錯誤 |
+| `3` | 至少一筆成功或降級，且結果不是全部成功 |
 | `4` | 所有樣本失敗；報告仍已產生 |
 
-錯誤 stdout 格式：
-
-```json
-{"schema_version":"1","error":{"code":"ERROR_CODE","path":"$.field","message":"可操作訊息"}}
-```
-
-`run` 的成功／部分結果符合 [`../schemas/result-v1.schema.json`](../schemas/result-v1.schema.json)。
+錯誤 stdout 是帶 `error.code`、`error.path` 與去識別化 `error.message` 的 JSON。成功與部分結果遵循
+[`../schemas/result-v2.schema.json`](../schemas/result-v2.schema.json)。

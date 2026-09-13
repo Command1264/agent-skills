@@ -15,7 +15,7 @@ from typing import Callable, Mapping, TextIO
 
 SKILL_VERSION = "2.0.0"
 CLI_CONTRACT_VERSION = "2.0.0"
-INSTALL_COMMAND = "npx skills add Command1264/agent-skills --skill google-routes"
+INSTALL_COMMAND = "npx skills add Command1264/agent-skills"
 SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 SAFE_REQUEST_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 UTC_OFFSET = re.compile(r"^([+-])(\d{2}):(\d{2})$")
@@ -1242,280 +1242,6 @@ def _validate_v2_schedule(
         )
 
 
-def _validate_execution_plan_v1(value: object, *, now: datetime) -> dict[str, object]:
-    plan = _require_object(value, "$")
-    _reject_unknown(
-        plan,
-        {
-            "schema_version",
-            "plan_contract_version",
-            "created_at",
-            "dependency",
-            "schedule",
-            "preview",
-            "samples",
-            "plan_id",
-        },
-        "$",
-    )
-    plan_id = _nonempty_string(plan.get("plan_id"), "$.plan_id")
-    content = {key: item for key, item in plan.items() if key != "plan_id"}
-    if plan_id != _content_id(content):
-        raise InputError(
-            "PLAN_ID_MISMATCH",
-            "plan 內容已改變；請重新執行 plan，並使用新的 plan_id",
-            "$.plan_id",
-        )
-    if plan.get("schema_version") != "1":
-        raise InputError("INVALID_PLAN", "schema_version 必須是 1", "$.schema_version")
-    if plan.get("plan_contract_version") != "1.0.0":
-        raise InputError(
-            "INVALID_PLAN",
-            "plan_contract_version 必須是 1.0.0",
-            "$.plan_contract_version",
-        )
-    samples = plan.get("samples")
-    if not isinstance(samples, list) or not samples:
-        raise InputError("INVALID_PLAN", "samples 必須是非空 array", "$.samples")
-    preview = _require_object(plan.get("preview"), "$.preview")
-    _reject_unknown(
-        preview,
-        {
-            "company_count",
-            "request_count",
-            "retry_limit",
-            "maximum_http_requests",
-            "rate_limit_qpm",
-            "local_rate_limit_only",
-            "confirmation_threshold",
-            "confirmation_required",
-            "estimated_sku_requests",
-        },
-        "$.preview",
-    )
-    if preview.get("request_count") != len(samples):
-        raise InputError(
-            "INVALID_PLAN", "request_count 與 samples 數量不一致", "$.preview.request_count"
-        )
-    if preview.get("retry_limit") != 2:
-        raise InputError("INVALID_PLAN", "retry_limit 必須是 2", "$.preview.retry_limit")
-    if preview.get("maximum_http_requests") != len(samples) * 3:
-        raise InputError(
-            "INVALID_PLAN",
-            "maximum_http_requests 必須等於 request_count 的三倍",
-            "$.preview.maximum_http_requests",
-        )
-    threshold = preview.get("confirmation_threshold")
-    if type(threshold) is not int or not 1 <= threshold <= 1000:
-        raise InputError(
-            "INVALID_PLAN",
-            "confirmation_threshold 必須是 1 到 1000 的整數",
-            "$.preview.confirmation_threshold",
-        )
-    if preview.get("confirmation_required") is not (len(samples) > threshold):
-        raise InputError(
-            "INVALID_PLAN",
-            "confirmation_required 與 request_count 不一致",
-            "$.preview.confirmation_required",
-        )
-    _bounded_int(preview.get("rate_limit_qpm"), "$.preview.rate_limit_qpm", 1, 3000)
-    if preview.get("local_rate_limit_only") is not True:
-        raise InputError(
-            "INVALID_PLAN",
-            "local_rate_limit_only 必須是 true",
-            "$.preview.local_rate_limit_only",
-        )
-
-    request_ids: set[str] = set()
-    mode_counts = {"DRIVE": 0, "TWO_WHEELER": 0}
-    company_ids: set[str] = set()
-    sample_dates: set[str] = set()
-    for index, sample_value in enumerate(samples):
-        sample = _require_object(sample_value, f"$.samples[{index}]")
-        _reject_unknown(
-            sample,
-            {
-                "request_id",
-                "company_id",
-                "company_name",
-                "date",
-                "direction",
-                "origin_label",
-                "destination_label",
-                "origin",
-                "destination",
-                "travel_mode",
-                "departure_time",
-            },
-            f"$.samples[{index}]",
-        )
-        request_id = _nonempty_string(
-            sample.get("request_id"), f"$.samples[{index}].request_id"
-        )
-        if request_id in request_ids:
-            raise InputError(
-                "INVALID_PLAN",
-                "request_id 不得重複",
-                f"$.samples[{index}].request_id",
-            )
-        request_ids.add(request_id)
-        company_id = _nonempty_string(
-            sample.get("company_id"), f"$.samples[{index}].company_id"
-        )
-        company_ids.add(company_id)
-        _nonempty_string(sample.get("company_name"), f"$.samples[{index}].company_name")
-        _nonempty_string(sample.get("origin_label"), f"$.samples[{index}].origin_label")
-        _nonempty_string(
-            sample.get("destination_label"), f"$.samples[{index}].destination_label"
-        )
-        _validate_location(sample.get("origin"), f"$.samples[{index}].origin")
-        _validate_location(sample.get("destination"), f"$.samples[{index}].destination")
-        if sample.get("direction") not in {"outbound", "return"}:
-            raise InputError(
-                "INVALID_PLAN",
-                "direction 必須是 outbound 或 return",
-                f"$.samples[{index}].direction",
-            )
-        mode = sample.get("travel_mode")
-        if mode not in mode_counts:
-            raise InputError(
-                "INVALID_PLAN",
-                "travel_mode 必須是 DRIVE 或 TWO_WHEELER",
-                f"$.samples[{index}].travel_mode",
-            )
-        mode_counts[str(mode)] += 1
-        sample_date = _nonempty_string(
-            sample.get("date"), f"$.samples[{index}].date"
-        )
-        try:
-            parsed_sample_date = date.fromisoformat(sample_date)
-        except ValueError as exc:
-            raise InputError(
-                "INVALID_PLAN",
-                "date 必須是 YYYY-MM-DD",
-                f"$.samples[{index}].date",
-            ) from exc
-        sample_dates.add(sample_date)
-        departure_text = _nonempty_string(
-            sample.get("departure_time"), f"$.samples[{index}].departure_time"
-        )
-        try:
-            departure = datetime.fromisoformat(departure_text)
-        except ValueError as exc:
-            raise InputError(
-                "INVALID_PLAN",
-                "departure_time 必須是 ISO 8601 date-time",
-                f"$.samples[{index}].departure_time",
-            ) from exc
-        if departure.tzinfo is None or departure.utcoffset() is None:
-            raise InputError(
-                "INVALID_PLAN",
-                "departure_time 必須包含 UTC offset",
-                f"$.samples[{index}].departure_time",
-            )
-        if departure <= now.astimezone(departure.tzinfo):
-            raise InputError(
-                "PLAN_EXPIRED",
-                "plan 含有已到期的 departure_time；請重新執行 plan",
-                f"$.samples[{index}].departure_time",
-            )
-        if departure.date() != parsed_sample_date:
-            raise InputError(
-                "INVALID_PLAN",
-                "date 必須與 departure_time 的本地日期一致",
-                f"$.samples[{index}].date",
-            )
-
-    sku = _require_object(
-        preview.get("estimated_sku_requests"), "$.preview.estimated_sku_requests"
-    )
-    if sku != {
-        "routes_compute_pro": mode_counts["DRIVE"],
-        "routes_compute_enterprise": mode_counts["TWO_WHEELER"],
-    }:
-        raise InputError(
-            "INVALID_PLAN",
-            "estimated_sku_requests 與 samples 不一致",
-            "$.preview.estimated_sku_requests",
-        )
-    if preview.get("company_count") != len(company_ids):
-        raise InputError(
-            "INVALID_PLAN",
-            "company_count 與 samples 不一致",
-            "$.preview.company_count",
-        )
-
-    schedule = _require_object(plan.get("schedule"), "$.schedule")
-    _reject_unknown(
-        schedule,
-        {
-            "start_date",
-            "end_date",
-            "weeks",
-            "weekdays",
-            "dates",
-            "utc_offset",
-            "morning_departure_time",
-            "evening_departure_time",
-            "travel_modes",
-        },
-        "$.schedule",
-    )
-    _bounded_int(schedule.get("weeks"), "$.schedule.weeks", 1, 4)
-    _weekdays_at_path(schedule.get("weekdays"), "$.schedule.weekdays")
-    _parse_utc_offset(schedule.get("utc_offset"), "$.schedule.utc_offset")
-    _local_time(
-        schedule.get("morning_departure_time"),
-        "$.schedule.morning_departure_time",
-    )
-    _local_time(
-        schedule.get("evening_departure_time"),
-        "$.schedule.evening_departure_time",
-    )
-    schedule_modes = _travel_modes(
-        schedule.get("travel_modes"), "$.schedule.travel_modes"
-    )
-    actual_modes = {mode for mode, count in mode_counts.items() if count}
-    if set(schedule_modes) != actual_modes:
-        raise InputError(
-            "INVALID_PLAN",
-            "travel_modes 與 samples 不一致",
-            "$.schedule.travel_modes",
-        )
-    dates_value = schedule.get("dates")
-    if (
-        not isinstance(dates_value, list)
-        or any(not isinstance(item, str) for item in dates_value)
-        or dates_value != sorted(sample_dates)
-    ):
-        raise InputError(
-            "INVALID_PLAN", "dates 與 samples 不一致", "$.schedule.dates"
-        )
-    try:
-        schedule_start = date.fromisoformat(
-            _nonempty_string(schedule.get("start_date"), "$.schedule.start_date")
-        )
-        schedule_end = date.fromisoformat(
-            _nonempty_string(schedule.get("end_date"), "$.schedule.end_date")
-        )
-    except ValueError as exc:
-        raise InputError(
-            "INVALID_PLAN", "start_date 與 end_date 必須是 YYYY-MM-DD", "$.schedule"
-        ) from exc
-    if schedule_end != schedule_start + timedelta(days=int(schedule["weeks"]) * 7 - 1):
-        raise InputError(
-            "INVALID_PLAN", "end_date 與 weeks 不一致", "$.schedule.end_date"
-        )
-    if any(
-        not schedule_start <= date.fromisoformat(item) <= schedule_end
-        for item in dates_value
-    ):
-        raise InputError(
-            "INVALID_PLAN", "dates 超出 schedule 範圍", "$.schedule.dates"
-        )
-    return plan
-
-
 def _validate_config(value: object) -> dict[str, object]:
     config = _require_object(value, "$config")
     if config.get("schema_version") == "1":
@@ -2147,15 +1873,14 @@ def _route_query_from_plan(plan: Mapping[str, object]) -> dict[str, object]:
         requests.append(
             {
                 "request_id": sample["request_id"],
-                "origin": sample["origin"],
-                "destination": sample["destination"],
+                "points": copy.deepcopy(sample["points"]),
                 "travel_mode": sample["travel_mode"],
                 "departure_time": sample["departure_time"],
             }
         )
     return {
-        "schema_version": "1",
-        "profile": "summary",
+        "schema_version": "2",
+        "profile": "itinerary_summary",
         "rate_limit_qpm": preview["rate_limit_qpm"],
         "requests": requests,
     }
@@ -2167,11 +1892,26 @@ def analyze_route_results(
     schedule = _require_object(plan.get("schedule"), "$.schedule")
     weeks = _bounded_int(schedule.get("weeks"), "$.schedule.weeks", 1, 4)
     route = _require_object(route_value, "$route_result")
-    if route.get("schema_version") != "1" or route.get("cli_contract_version") != "2.0.0":
+    if (
+        route.get("schema_version") != "2"
+        or route.get("cli_contract_version") != "2.0.0"
+        or route.get("profile") != "itinerary_summary"
+    ):
         raise InputError(
             "GOOGLE_ROUTES_RESULT_INCOMPATIBLE",
-            "google-routes result contract 不相容",
+            "google-routes itinerary result contract 不相容",
             "$route_result",
+        )
+    if route.get("status") not in {
+        "success",
+        "degraded",
+        "partial_success",
+        "failure",
+    }:
+        raise InputError(
+            "GOOGLE_ROUTES_RESULT_INCOMPATIBLE",
+            "google-routes result status 不相容",
+            "$route_result.status",
         )
     results_value = route.get("results")
     if not isinstance(results_value, list):
@@ -2180,23 +1920,26 @@ def analyze_route_results(
             "results 必須是 array",
             "$route_result.results",
         )
-    result_by_id: dict[str, dict[str, object]] = {}
+    result_by_id: dict[str, tuple[int, dict[str, object]]] = {}
     for index, result_value in enumerate(results_value):
-        result = _require_object(result_value, f"$route_result.results[{index}]")
-        request_id = _nonempty_string(
-            result.get("request_id"), f"$route_result.results[{index}].request_id"
-        )
+        path = f"$route_result.results[{index}]"
+        result = _require_object(result_value, path)
+        request_id = _nonempty_string(result.get("request_id"), f"{path}.request_id")
         if request_id in result_by_id:
             raise InputError(
                 "GOOGLE_ROUTES_RESULT_INCOMPATIBLE",
                 "request_id 不得重複",
-                f"$route_result.results[{index}].request_id",
+                f"{path}.request_id",
             )
-        result_by_id[request_id] = result
+        result_by_id[request_id] = (index, result)
 
     samples_value = plan.get("samples")
     assert isinstance(samples_value, list)
-    expected_ids = {str(sample["request_id"]) for sample in samples_value if isinstance(sample, dict)}
+    expected_ids = {
+        str(sample["request_id"])
+        for sample in samples_value
+        if isinstance(sample, dict)
+    }
     if set(result_by_id) != expected_ids:
         raise InputError(
             "GOOGLE_ROUTES_RESULT_INCOMPATIBLE",
@@ -2205,33 +1948,34 @@ def analyze_route_results(
         )
 
     normalized_samples: list[dict[str, object]] = []
-    for sample_value in samples_value:
-        sample = _require_object(sample_value, "$.samples[]")
-        provider = result_by_id[str(sample["request_id"])]
+    for sample_index, sample_value in enumerate(samples_value):
+        sample = _require_object(sample_value, f"$.samples[{sample_index}]")
+        result_index, provider = result_by_id[str(sample["request_id"])]
+        result_path = f"$route_result.results[{result_index}]"
         status = provider.get("status")
         if status not in {"success", "degraded", "error"}:
             raise InputError(
                 "GOOGLE_ROUTES_RESULT_INCOMPATIBLE",
                 "未知 route status",
-                "$route_result.results[].status",
+                f"{result_path}.status",
             )
         if provider.get("travel_mode") != sample.get("travel_mode"):
             raise InputError(
                 "GOOGLE_ROUTES_RESULT_INCOMPATIBLE",
                 "result travel_mode 與 plan 不一致",
-                "$route_result.results[].travel_mode",
+                f"{result_path}.travel_mode",
             )
         attempts = provider.get("attempts")
         if type(attempts) is not int or not 1 <= attempts <= 3:
             raise InputError(
                 "GOOGLE_ROUTES_RESULT_INCOMPATIBLE",
                 "attempts 必須是 1 到 3 的整數",
-                "$route_result.results[].attempts",
+                f"{result_path}.attempts",
             )
         normalized: dict[str, object] = {
             "request_id": sample["request_id"],
-            "company_id": sample["company_id"],
-            "company_name": sample["company_name"],
+            "journey_id": sample["journey_id"],
+            "journey_label": sample["journey_label"],
             "date": sample["date"],
             "direction": sample["direction"],
             "travel_mode": sample["travel_mode"],
@@ -2239,24 +1983,16 @@ def analyze_route_results(
             "attempts": attempts,
         }
         if status in {"success", "degraded"}:
-            duration = provider.get("duration_seconds")
-            static_duration = provider.get("static_duration_seconds")
-            if not isinstance(duration, (int, float)) or isinstance(duration, bool) or duration < 0:
-                raise InputError(
-                    "GOOGLE_ROUTES_RESULT_INCOMPATIBLE",
-                    "duration_seconds 必須是非負數",
-                    "$route_result.results[].duration_seconds",
-                )
-            if (
-                not isinstance(static_duration, (int, float))
-                or isinstance(static_duration, bool)
-                or static_duration < 0
-            ):
-                raise InputError(
-                    "GOOGLE_ROUTES_RESULT_INCOMPATIBLE",
-                    "static_duration_seconds 必須是非負數",
-                    "$route_result.results[].static_duration_seconds",
-                )
+            distance = _provider_number(
+                provider.get("distance_meters"), f"{result_path}.distance_meters"
+            )
+            duration = _provider_number(
+                provider.get("duration_seconds"), f"{result_path}.duration_seconds"
+            )
+            static_duration = _provider_number(
+                provider.get("static_duration_seconds"),
+                f"{result_path}.static_duration_seconds",
+            )
             warnings = provider.get("warnings")
             if not isinstance(warnings, list) or any(
                 not isinstance(item, str) for item in warnings
@@ -2264,71 +2000,95 @@ def analyze_route_results(
                 raise InputError(
                     "GOOGLE_ROUTES_RESULT_INCOMPATIBLE",
                     "warnings 必須是 string array",
-                    "$route_result.results[].warnings",
+                    f"{result_path}.warnings",
                 )
-            fallback = provider.get("fallback")
-            if fallback is not None:
-                fallback_value = _require_object(
-                    fallback, "$route_result.results[].fallback"
+            fallback = _safe_fallback(provider.get("fallback"), result_path)
+            planned_points = sample["points"]
+            assert isinstance(planned_points, list)
+            expected_labels = [str(point["label"]) for point in planned_points]
+            _validate_provider_points(
+                provider.get("points"), expected_labels, result_path
+            )
+            legs = _normalize_provider_legs(
+                provider.get("legs"), expected_labels, result_path
+            )
+            totals = (
+                sum(float(leg["distance_meters"]) for leg in legs),
+                sum(float(leg["duration_seconds"]) for leg in legs),
+                sum(float(leg["static_duration_seconds"]) for leg in legs),
+            )
+            if any(
+                abs(actual - expected) > 1e-9
+                for actual, expected in zip(
+                    totals,
+                    (float(distance), float(duration), float(static_duration)),
+                    strict=True,
                 )
-                _reject_unknown(
-                    fallback_value,
-                    {"routing_mode", "reason"},
-                    "$route_result.results[].fallback",
+            ):
+                raise InputError(
+                    "DEPENDENCY_LEG_MISMATCH",
+                    "google-routes 的 route totals 與 legs 不一致",
+                    f"{result_path}.legs",
                 )
-                fallback = {
-                    "routing_mode": _nonempty_string(
-                        fallback_value.get("routing_mode"),
-                        "$route_result.results[].fallback.routing_mode",
-                    ),
-                    "reason": _nonempty_string(
-                        fallback_value.get("reason"),
-                        "$route_result.results[].fallback.reason",
-                    ),
-                }
             normalized.update(
                 {
+                    "distance_meters": distance,
                     "duration_seconds": duration,
                     "static_duration_seconds": static_duration,
-                    "warnings": warnings,
+                    "legs": legs,
+                    "warnings": list(warnings),
                     "fallback": fallback,
                 }
             )
         else:
             provider_error = provider.get("error")
-            if not isinstance(provider_error, dict):
-                provider_error = {}
+            error_value = provider_error if isinstance(provider_error, dict) else {}
             safe_error: dict[str, object] = {
-                "code": provider_error.get("code")
-                if isinstance(provider_error.get("code"), str)
+                "code": error_value.get("code")
+                if isinstance(error_value.get("code"), str)
+                and str(error_value.get("code")).strip()
                 else "UNKNOWN",
-                "retryable": provider_error.get("retryable") is True,
+                "retryable": error_value.get("retryable") is True,
             }
-            http_status = provider_error.get("http_status")
+            http_status = error_value.get("http_status")
             if type(http_status) is int and 300 <= http_status <= 599:
                 safe_error["http_status"] = http_status
             normalized["error"] = safe_error
         normalized_samples.append(normalized)
 
-    companies: list[dict[str, object]] = []
-    company_order: list[tuple[str, str]] = []
+    journeys: list[dict[str, object]] = []
+    journey_order: list[tuple[str, str]] = []
     for sample in normalized_samples:
-        identity = (str(sample["company_id"]), str(sample["company_name"]))
-        if identity not in company_order:
-            company_order.append(identity)
-    for company_id, company_name in company_order:
-        company_samples = [item for item in normalized_samples if item["company_id"] == company_id]
+        identity = (str(sample["journey_id"]), str(sample["journey_label"]))
+        if identity not in journey_order:
+            journey_order.append(identity)
+    for journey_id, journey_label in journey_order:
+        journey_samples = [
+            item for item in normalized_samples if item["journey_id"] == journey_id
+        ]
         modes: dict[str, object] = {}
         for mode in ("TWO_WHEELER", "DRIVE"):
-            mode_samples = [item for item in company_samples if item["travel_mode"] == mode]
+            mode_samples = [
+                item for item in journey_samples if item["travel_mode"] == mode
+            ]
             if not mode_samples:
                 continue
             successes = [item for item in mode_samples if item["status"] == "success"]
-            outbound = [float(item["duration_seconds"]) for item in successes if item["direction"] == "outbound"]
-            returns = [float(item["duration_seconds"]) for item in successes if item["direction"] == "return"]
+            outbound = [
+                float(item["duration_seconds"])
+                for item in successes
+                if item["direction"] == "outbound"
+            ]
+            returns = [
+                float(item["duration_seconds"])
+                for item in successes
+                if item["direction"] == "return"
+            ]
             by_date: dict[str, dict[str, float]] = {}
             for item in successes:
-                by_date.setdefault(str(item["date"]), {})[str(item["direction"])] = float(item["duration_seconds"])
+                by_date.setdefault(str(item["date"]), {})[
+                    str(item["direction"])
+                ] = float(item["duration_seconds"])
             round_trips = [
                 directions["outbound"] + directions["return"]
                 for directions in by_date.values()
@@ -2345,35 +2105,55 @@ def analyze_route_results(
                     "return": _statistics(returns),
                     "daily_round_trip": _statistics(round_trips),
                 },
-                "weekly_total_seconds": _clean_number(weekly_total) if complete else None,
-                "four_week_month_estimate_seconds": _clean_number(weekly_total * 4) if complete else None,
-                "samples": mode_samples,
+                "weekly_total_seconds": (
+                    _clean_number(weekly_total) if complete else None
+                ),
+                "four_week_month_estimate_seconds": (
+                    _clean_number(weekly_total * 4) if complete else None
+                ),
+                "samples": [
+                    {
+                        key: value
+                        for key, value in item.items()
+                        if key not in {"journey_id", "journey_label"}
+                    }
+                    for item in mode_samples
+                ],
             }
         motorcycle = modes.get("TWO_WHEELER")
         eligible = isinstance(motorcycle, dict) and motorcycle["complete"] is True
-        reasons: list[str] = [] if eligible else ["機車必要樣本不完整"]
-        companies.append(
+        if eligible:
+            reasons: list[str] = []
+        elif motorcycle is None:
+            reasons = ["未要求機車模式"]
+        else:
+            reasons = ["機車必要樣本不完整"]
+        journeys.append(
             {
-                "company_id": company_id,
-                "company_name": company_name,
+                "journey_id": journey_id,
+                "journey_label": journey_label,
                 "ranking_eligible": eligible,
                 "ranking_exclusion_reasons": reasons,
                 "modes": modes,
             }
         )
 
-    ranked = [company for company in companies if company["ranking_eligible"]]
+    ranked = [journey for journey in journeys if journey["ranking_eligible"]]
     ranked.sort(
-        key=lambda company: company["modes"]["TWO_WHEELER"]["statistics"]["daily_round_trip"]["average_seconds"]
+        key=lambda journey: journey["modes"]["TWO_WHEELER"]["statistics"][
+            "daily_round_trip"
+        ]["average_seconds"]
     )
     ranking = [
         {
             "rank": index,
-            "company_id": company["company_id"],
-            "company_name": company["company_name"],
-            "daily_round_trip_average_seconds": company["modes"]["TWO_WHEELER"]["statistics"]["daily_round_trip"]["average_seconds"],
+            "journey_id": journey["journey_id"],
+            "journey_label": journey["journey_label"],
+            "daily_round_trip_average_seconds": journey["modes"][
+                "TWO_WHEELER"
+            ]["statistics"]["daily_round_trip"]["average_seconds"],
         }
-        for index, company in enumerate(ranked, start=1)
+        for index, journey in enumerate(ranked, start=1)
     ]
     status_counts = {
         status: sum(1 for item in normalized_samples if item["status"] == status)
@@ -2385,14 +2165,10 @@ def analyze_route_results(
         overall_status = "partial_success"
     else:
         overall_status = "failure"
-    attempts = sum(
-        int(item["attempts"])
-        for item in normalized_samples
-        if isinstance(item.get("attempts"), int)
-    )
+    attempts = sum(int(item["attempts"]) for item in normalized_samples)
     return {
-        "schema_version": "1",
-        "analysis_contract_version": "1.0.0",
+        "schema_version": "2",
+        "analysis_contract_version": "2.0.0",
         "plan_id": plan["plan_id"],
         "generated_at": now.isoformat(),
         "status": overall_status,
@@ -2405,9 +2181,95 @@ def analyze_route_results(
             "degraded": status_counts["degraded"],
             "failed": status_counts["error"],
         },
-        "companies": companies,
+        "journeys": journeys,
         "ranking": ranking,
     }
+
+
+def _provider_number(value: object, path: str) -> int | float:
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
+        raise InputError(
+            "GOOGLE_ROUTES_RESULT_INCOMPATIBLE",
+            "route 數值必須是非負數",
+            path,
+        )
+    return value
+
+
+def _safe_fallback(value: object, result_path: str) -> dict[str, str] | None:
+    if value is None:
+        return None
+    fallback = _require_object(value, f"{result_path}.fallback")
+    return {
+        "routing_mode": _nonempty_string(
+            fallback.get("routing_mode"), f"{result_path}.fallback.routing_mode"
+        ),
+        "reason": _nonempty_string(
+            fallback.get("reason"), f"{result_path}.fallback.reason"
+        ),
+    }
+
+
+def _validate_provider_points(
+    value: object, expected_labels: list[str], result_path: str
+) -> None:
+    if not isinstance(value, list) or len(value) != len(expected_labels):
+        raise InputError(
+            "DEPENDENCY_LEG_MISMATCH",
+            "google-routes 的 Points 數量與 plan 不一致",
+            f"{result_path}.points",
+        )
+    labels = []
+    for index, point_value in enumerate(value):
+        point = _require_object(point_value, f"{result_path}.points[{index}]")
+        labels.append(point.get("label"))
+    if labels != expected_labels:
+        raise InputError(
+            "DEPENDENCY_LEG_MISMATCH",
+            "google-routes 的 Point labels 與 plan 不一致",
+            f"{result_path}.points",
+        )
+
+
+def _normalize_provider_legs(
+    value: object, expected_labels: list[str], result_path: str
+) -> list[dict[str, object]]:
+    if not isinstance(value, list) or len(value) != len(expected_labels) - 1:
+        raise InputError(
+            "DEPENDENCY_LEG_MISMATCH",
+            "google-routes 的 legs 數量與 plan 不一致",
+            f"{result_path}.legs",
+        )
+    legs: list[dict[str, object]] = []
+    for index, leg_value in enumerate(value):
+        path = f"{result_path}.legs[{index}]"
+        leg = _require_object(leg_value, path)
+        if (
+            leg.get("from_label") != expected_labels[index]
+            or leg.get("to_label") != expected_labels[index + 1]
+        ):
+            raise InputError(
+                "DEPENDENCY_LEG_MISMATCH",
+                "google-routes 的 leg labels 與 plan 不一致",
+                path,
+            )
+        legs.append(
+            {
+                "from_label": expected_labels[index],
+                "to_label": expected_labels[index + 1],
+                "distance_meters": _provider_number(
+                    leg.get("distance_meters"), f"{path}.distance_meters"
+                ),
+                "duration_seconds": _provider_number(
+                    leg.get("duration_seconds"), f"{path}.duration_seconds"
+                ),
+                "static_duration_seconds": _provider_number(
+                    leg.get("static_duration_seconds"),
+                    f"{path}.static_duration_seconds",
+                ),
+            }
+        )
+    return legs
 
 
 def _statistics(values: list[float]) -> dict[str, int | float] | None:
@@ -2448,7 +2310,7 @@ def write_private_outputs(
         schedule = _require_object(plan.get("schedule"), "$.schedule")
         summary = _require_object(analysis.get("request_summary"), "$.request_summary")
         ledger_entry = {
-            "schema_version": "1",
+            "schema_version": "2",
             "executed_at": now.isoformat(),
             "plan_id": plan["plan_id"],
             "planned_requests": summary["planned"],
@@ -2487,16 +2349,18 @@ def _render_markdown(analysis: Mapping[str, object]) -> str:
         lines.extend(["## 機車通勤排名", ""])
         for item in ranking:
             lines.append(
-                f"{item['rank']}. {item['company_name']}："
+                f"{item['rank']}. {_markdown_text(item['journey_label'])}："
                 f"每日來回平均 {_format_seconds(item['daily_round_trip_average_seconds'])}"
             )
         lines.append("")
-    lines.extend(["## 公司結果", ""])
-    for company in analysis.get("companies", []):
-        lines.extend([f"### {company['company_name']}", ""])
-        if not company["ranking_eligible"]:
-            lines.append("- 排名：不納入（機車必要樣本不完整）")
-        for mode, mode_result in company["modes"].items():
+    lines.extend(["## 行程結果", ""])
+    for journey in analysis.get("journeys", []):
+        lines.extend([f"### {_markdown_text(journey['journey_label'])}", ""])
+        if not journey["ranking_eligible"]:
+            reasons = journey.get("ranking_exclusion_reasons", [])
+            explanation = "、".join(str(reason) for reason in reasons)
+            lines.append(f"- 排名：不納入（{explanation}）")
+        for mode, mode_result in journey["modes"].items():
             lines.append(f"- {mode}：{'完整' if mode_result['complete'] else '不完整'}")
             statistics_value = mode_result["statistics"]
             _append_markdown_statistics(lines, "去程", statistics_value["outbound"])
@@ -2511,6 +2375,11 @@ def _render_markdown(analysis: Mapping[str, object]) -> str:
                 )
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _markdown_text(value: object) -> str:
+    text = str(value).replace("\r\n", " ").replace("\r", " ").replace("\n", " ")
+    return re.sub(r"([\\`*_[\]{}()#+\-.!|>])", r"\\\1", text)
 
 
 def _append_markdown_statistics(

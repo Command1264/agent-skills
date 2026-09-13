@@ -43,11 +43,17 @@ def private_config() -> dict[str, object]:
 def dependency() -> dict[str, object]:
     return {
         "path": "C:/skills/google-routes",
-        "skill_version": "2.0.0",
+        "skill_version": "2.1.0",
         "cli_contract_version": "2.0.0",
-        "schema_version": "1",
+        "schema_version": "2",
         "travel_modes": ["DRIVE", "TWO_WHEELER"],
-        "output_profile": "summary",
+        "output_profile": "itinerary_summary",
+        "itinerary_limits": {
+            "minimum_points": 2,
+            "maximum_points": 12,
+            "maximum_intermediate_waypoints": 10,
+            "waypoint_order": "fixed",
+        },
     }
 
 
@@ -93,17 +99,31 @@ def route_result_for_plan(
     replacements = overrides or {}
     results: list[dict[str, object]] = []
     for sample in plan["samples"]:
+        points = sample["points"]
+        leg_count = len(points) - 1
         result: dict[str, object] = {
             "request_id": sample["request_id"],
             "status": "success",
             "travel_mode": sample["travel_mode"],
-            "distance_meters": 10000,
+            "distance_meters": 10000 * leg_count,
             "duration_seconds": 600,
             "static_duration_seconds": 540,
             "warnings": [],
             "fallback": None,
-            "origin_place_id": None,
-            "destination_place_id": None,
+            "points": [
+                {"label": point["label"], "place_id": None}
+                for point in points
+            ],
+            "legs": [
+                {
+                    "from_label": points[index]["label"],
+                    "to_label": points[index + 1]["label"],
+                    "distance_meters": 10000,
+                    "duration_seconds": 600 / leg_count,
+                    "static_duration_seconds": 540 / leg_count,
+                }
+                for index in range(leg_count)
+            ],
             "attempts": 1,
         }
         result.update(replacements.get(sample["request_id"], {}))
@@ -117,9 +137,9 @@ def route_result_for_plan(
             }
         results.append(result)
     return {
-        "schema_version": "1",
+        "schema_version": "2",
         "cli_contract_version": "2.0.0",
-        "profile": "summary",
+        "profile": "itinerary_summary",
         "status": "success",
         "results": results,
     }
@@ -196,7 +216,7 @@ class DependencyTests(unittest.TestCase):
 
         self.assertEqual(context.exception.code, "GOOGLE_ROUTES_NOT_FOUND")
         self.assertIn(
-            "npx skills add Command1264/agent-skills --skill google-routes",
+            "npx skills add Command1264/agent-skills",
             context.exception.message,
         )
 
@@ -1008,14 +1028,7 @@ class PlanTests(unittest.TestCase):
 class RunTests(unittest.TestCase):
     @staticmethod
     def _compatible_capabilities() -> dict[str, object]:
-        return {
-            "skill_name": "google-routes",
-            "skill_version": "2.0.0",
-            "cli_contract_version": "2.0.0",
-            "schema_versions": ["1"],
-            "travel_modes": ["DRIVE", "TWO_WHEELER"],
-            "output_profiles": ["summary"],
-        }
+        return itinerary_capabilities()
 
     def test_legacy_plan_stops_before_dependency_or_private_output(self) -> None:
         examples = ROOT / "skills" / "commute-analyzer" / "examples"
@@ -1070,15 +1083,10 @@ class RunTests(unittest.TestCase):
             del skill_path
             calls.append(command)
             if command == "capabilities":
-                return 0, json.dumps({
-                    "skill_name": "google-routes",
-                    "skill_version": "2.0.0",
-                    "cli_contract_version": "2.0.0",
-                    "schema_versions": ["1"],
-                    "travel_modes": ["DRIVE", "TWO_WHEELER"],
-                    "output_profiles": ["summary"],
-                }), ""
+                return 0, json.dumps(itinerary_capabilities()), ""
             self.assertNotIn("GOOGLE_MAPS_API_KEY", environ)
+            self.assertEqual(payload["schema_version"], "2")
+            self.assertEqual(payload["profile"], "itinerary_summary")
             requests = payload["requests"]
             results = []
             for request in requests:
@@ -1088,6 +1096,7 @@ class RunTests(unittest.TestCase):
                     ("return", "TWO_WHEELER"): 720,
                     ("return", "DRIVE"): 840,
                 }[(request["request_id"].split(".")[2], request["travel_mode"])]
+                points = request["points"]
                 results.append({
                     "request_id": request["request_id"],
                     "status": "success",
@@ -1097,14 +1106,26 @@ class RunTests(unittest.TestCase):
                     "static_duration_seconds": duration - 60,
                     "warnings": [],
                     "fallback": None,
-                    "origin_place_id": None,
-                    "destination_place_id": None,
+                    "points": [
+                        {"label": point["label"], "place_id": None}
+                        for point in points
+                    ],
+                    "legs": [
+                        {
+                            "from_label": points[index]["label"],
+                            "to_label": points[index + 1]["label"],
+                            "distance_meters": 10000,
+                            "duration_seconds": duration,
+                            "static_duration_seconds": duration - 60,
+                        }
+                        for index in range(len(points) - 1)
+                    ],
                     "attempts": 1,
                 })
             return 0, json.dumps({
-                "schema_version": "1",
+                "schema_version": "2",
                 "cli_contract_version": "2.0.0",
-                "profile": "summary",
+                "profile": "itinerary_summary",
                 "status": "success",
                 "results": results,
             }), ""
@@ -1154,11 +1175,11 @@ class RunTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(calls, ["capabilities", "query"])
         self.assertEqual(result["status"], "success")
-        motorcycle = result["companies"][0]["modes"]["TWO_WHEELER"]
+        motorcycle = result["journeys"][0]["modes"]["TWO_WHEELER"]
         self.assertEqual(motorcycle["statistics"]["daily_round_trip"]["average_seconds"], 1320)
         self.assertEqual(motorcycle["weekly_total_seconds"], 6600)
         self.assertEqual(motorcycle["four_week_month_estimate_seconds"], 26400)
-        self.assertEqual(result["ranking"][0]["company_id"], "acme")
+        self.assertEqual(result["ranking"][0]["journey_id"], "acme")
         self.assertIn("去程：平均", report_text)
         self.assertIn("回程：平均", report_text)
         self.assertIn("每日來回：平均", report_text)
@@ -1168,6 +1189,117 @@ class RunTests(unittest.TestCase):
         self.assertNotIn("ChIJExampleCompany", report_json_text)
         self.assertNotIn("test-only-key", ledger_text)
         self.assertNotIn("duration", ledger_text)
+
+    def test_v2_run_compares_saved_origins_and_inline_destination_with_waypoint(self) -> None:
+        examples = ROOT / "skills" / "commute-analyzer" / "examples"
+        config = json.loads((examples / "config-v2.json").read_text(encoding="utf-8"))
+        request = json.loads(
+            (examples / "plan-request-v2.json").read_text(encoding="utf-8")
+        )
+        observed_query: dict[str, object] = {}
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            google_routes = root / "google-routes"
+            DependencyTests._make_skill(google_routes)
+            dependency_info = itinerary_dependency()
+            dependency_info["path"] = str(google_routes.resolve())
+            plan = commute_analyzer.build_plan(
+                request,
+                config,
+                dependency_info,
+                now=datetime(2099, 1, 1, 12, 0, tzinfo=timezone.utc),
+            )
+
+            def dependency_runner(
+                skill_path: Path,
+                command: str,
+                payload: object,
+                environ: dict[str, str],
+            ) -> tuple[int, str, str]:
+                del skill_path, environ
+                if command == "capabilities":
+                    return 0, json.dumps(itinerary_capabilities()), ""
+                observed_query.update(payload)
+                return 0, json.dumps(route_result_for_plan(plan)), ""
+
+            stdout = io.StringIO()
+            exit_code = commute_analyzer.run_cli(
+                ["run", "--output-dir", str(root / "reports")],
+                stdin=io.StringIO(json.dumps(plan, ensure_ascii=False)),
+                stdout=stdout,
+                stderr=io.StringIO(),
+                environ={
+                    "GOOGLE_ROUTES_SKILL_DIR": str(google_routes),
+                    "XDG_DATA_HOME": str(root / "data"),
+                },
+                cwd=root,
+                home=root / "home",
+                platform_name="linux",
+                now=datetime(2099, 1, 1, 12, 5, tzinfo=timezone.utc),
+                dependency_runner=dependency_runner,
+            )
+            result = json.loads(stdout.getvalue())
+            report_json = Path(result["outputs"]["json_report"]).read_text(
+                encoding="utf-8"
+            )
+            ledger = Path(result["outputs"]["usage_ledger"]).read_text(
+                encoding="utf-8"
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(observed_query["schema_version"], "2")
+        self.assertEqual(observed_query["profile"], "itinerary_summary")
+        query_by_id = {
+            item["request_id"]: item for item in observed_query["requests"]
+        }
+        outbound = query_by_id["rental-via-school.20990105.outbound.two-wheeler"]
+        returning = query_by_id["rental-via-school.20990105.return.two-wheeler"]
+        self.assertEqual(
+            [point["label"] for point in outbound["points"]],
+            ["示例租屋處", "示例學校", "示例應徵公司"],
+        )
+        self.assertEqual(
+            [point["label"] for point in returning["points"]],
+            ["示例應徵公司", "示例租屋處"],
+        )
+        self.assertEqual(
+            [journey["journey_id"] for journey in result["journeys"]],
+            ["home-to-candidate", "rental-via-school"],
+        )
+        self.assertEqual(
+            len(result["journeys"][1]["modes"]["TWO_WHEELER"]["samples"][0]["legs"]),
+            2,
+        )
+        for private_value in (
+            "示例市第一路 1 號",
+            "示例市第三路 3 號",
+            "ChIJExampleSchool",
+        ):
+            self.assertNotIn(private_value, report_json)
+            self.assertNotIn(private_value, ledger)
+
+    def test_provider_leg_labels_must_match_planned_point_order(self) -> None:
+        config, request = PlanTests._v2_inputs()
+        plan = commute_analyzer.build_plan(
+            request,
+            config,
+            itinerary_dependency(),
+            now=datetime(2099, 1, 1, 12, 0, tzinfo=timezone.utc),
+        )
+        route_result = route_result_for_plan(plan)
+        route_result["results"][2]["legs"][0]["to_label"] = "錯誤停靠點"
+
+        with self.assertRaises(commute_analyzer.InputError) as context:
+            commute_analyzer.analyze_route_results(
+                plan,
+                route_result,
+                now=datetime(2099, 1, 1, 12, 5, tzinfo=timezone.utc),
+            )
+
+        self.assertEqual(context.exception.code, "DEPENDENCY_LEG_MISMATCH")
+        self.assertEqual(context.exception.path, "$route_result.results[2].legs[0]")
+        self.assertNotIn("示例市", context.exception.message)
 
     def test_windows_default_outputs_use_cross_runtime_user_profile_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1418,7 +1550,7 @@ class RunTests(unittest.TestCase):
             "PLAN_DEPENDENCY_CHANGED",
         )
 
-    def test_motorcycle_failure_excludes_company_but_drive_failure_does_not(self) -> None:
+    def test_motorcycle_failure_excludes_journey_but_drive_failure_does_not(self) -> None:
         config = private_config()
         config["companies"].append({
             "id": "beta",
@@ -1434,12 +1566,12 @@ class RunTests(unittest.TestCase):
         acme_motorcycle = next(
             sample["request_id"]
             for sample in plan["samples"]
-            if sample["company_id"] == "acme" and sample["travel_mode"] == "TWO_WHEELER"
+            if sample["journey_id"] == "acme" and sample["travel_mode"] == "TWO_WHEELER"
         )
         beta_drive = next(
             sample["request_id"]
             for sample in plan["samples"]
-            if sample["company_id"] == "beta" and sample["travel_mode"] == "DRIVE"
+            if sample["journey_id"] == "beta" and sample["travel_mode"] == "DRIVE"
         )
         result = commute_analyzer.analyze_route_results(
             plan,
@@ -1453,10 +1585,10 @@ class RunTests(unittest.TestCase):
             now=datetime(2026, 9, 12, 12, 5, tzinfo=timezone.utc),
         )
 
-        by_id = {company["company_id"]: company for company in result["companies"]}
+        by_id = {journey["journey_id"]: journey for journey in result["journeys"]}
         self.assertFalse(by_id["acme"]["ranking_eligible"])
         self.assertTrue(by_id["beta"]["ranking_eligible"])
-        self.assertEqual([item["company_id"] for item in result["ranking"]], ["beta"])
+        self.assertEqual([item["journey_id"] for item in result["ranking"]], ["beta"])
         self.assertEqual(result["status"], "partial_success")
 
     def test_multi_week_results_are_normalized_to_one_week(self) -> None:
@@ -1477,7 +1609,7 @@ class RunTests(unittest.TestCase):
             route_result_for_plan(plan),
             now=datetime(2026, 9, 12, 12, 5, tzinfo=timezone.utc),
         )
-        motorcycle = result["companies"][0]["modes"]["TWO_WHEELER"]
+        motorcycle = result["journeys"][0]["modes"]["TWO_WHEELER"]
 
         self.assertEqual(motorcycle["weekly_total_seconds"], 2400)
         self.assertEqual(motorcycle["four_week_month_estimate_seconds"], 9600)
@@ -1508,8 +1640,71 @@ class RunTests(unittest.TestCase):
             now=datetime(2026, 9, 12, 12, 5, tzinfo=timezone.utc),
         )
 
-        self.assertFalse(result["companies"][0]["ranking_eligible"])
+        self.assertFalse(result["journeys"][0]["ranking_eligible"])
         self.assertEqual(result["request_summary"]["degraded"], 1)
+
+    def test_drive_only_report_explains_that_motorcycle_was_not_requested(self) -> None:
+        plan = commute_analyzer.build_plan(
+            {"schema_version": "1", "travel_modes": ["DRIVE"]},
+            private_config(),
+            dependency(),
+            now=datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc),
+        )
+        result = commute_analyzer.analyze_route_results(
+            plan,
+            route_result_for_plan(plan),
+            now=datetime(2026, 9, 12, 12, 5, tzinfo=timezone.utc),
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            outputs = commute_analyzer.write_private_outputs(
+                result,
+                plan,
+                output_dir=root / "reports",
+                ledger_path=root / "data" / "usage.jsonl",
+                now=datetime(2026, 9, 12, 12, 5, tzinfo=timezone.utc),
+            )
+            report = Path(outputs["markdown_report"]).read_text(encoding="utf-8")
+
+        self.assertEqual(
+            result["journeys"][0]["ranking_exclusion_reasons"],
+            ["未要求機車模式"],
+        )
+        self.assertIn("排名：不納入（未要求機車模式）", report)
+        self.assertNotIn("機車必要樣本不完整", report)
+
+    def test_markdown_report_escapes_user_controlled_journey_labels(self) -> None:
+        config = private_config()
+        config["companies"][0]["name"] = (
+            "![probe](https://example.invalid/pixel)\n# injected"
+        )
+        plan = commute_analyzer.build_plan(
+            {"schema_version": "1", "travel_modes": ["DRIVE"]},
+            config,
+            dependency(),
+            now=datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc),
+        )
+        result = commute_analyzer.analyze_route_results(
+            plan,
+            route_result_for_plan(plan),
+            now=datetime(2026, 9, 12, 12, 5, tzinfo=timezone.utc),
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            outputs = commute_analyzer.write_private_outputs(
+                result,
+                plan,
+                output_dir=root / "reports",
+                ledger_path=root / "data" / "usage.jsonl",
+                now=datetime(2026, 9, 12, 12, 5, tzinfo=timezone.utc),
+            )
+            report = Path(outputs["markdown_report"]).read_text(encoding="utf-8")
+
+        self.assertNotIn("![probe](", report)
+        self.assertNotIn("\n# injected", report)
+        self.assertIn(r"\!\[probe\]\(https://example\.invalid/pixel\)", report)
 
     def test_provider_error_is_sanitized_before_report_data(self) -> None:
         plan = commute_analyzer.build_plan(
@@ -1534,7 +1729,7 @@ class RunTests(unittest.TestCase):
         self.assertNotIn("示例市住家路", serialized)
         self.assertNotIn("secret detail", serialized)
         self.assertEqual(
-            result["companies"][0]["modes"]["TWO_WHEELER"]["samples"][0]["error"],
+            result["journeys"][0]["modes"]["TWO_WHEELER"]["samples"][0]["error"],
             {"code": "NETWORK_ERROR", "retryable": True},
         )
 
@@ -1954,26 +2149,57 @@ class ConfigCliTests(unittest.TestCase):
 
 
 class ExampleTests(unittest.TestCase):
-    def test_result_example_matches_runtime_analysis_and_has_no_locations(self) -> None:
+    def test_v2_result_example_matches_runtime_analysis_and_has_no_locations(self) -> None:
         examples = ROOT / "skills" / "commute-analyzer" / "examples"
-        plan = json.loads((examples / "plan.json").read_text(encoding="utf-8"))
-        expected = json.loads((examples / "result.json").read_text(encoding="utf-8"))
-        route_result = route_result_for_plan(plan)
-        for result in route_result["results"]:
-            duration = 600 if result["travel_mode"] == "TWO_WHEELER" else 900
-            result["duration_seconds"] = duration
-            result["static_duration_seconds"] = duration - 60
+        plan = json.loads((examples / "plan-v2.json").read_text(encoding="utf-8"))
+        expected = json.loads(
+            (examples / "result-v2.json").read_text(encoding="utf-8")
+        )
+        plan_samples = {sample["request_id"]: sample for sample in plan["samples"]}
+        provider_results = []
+        for journey in expected["journeys"]:
+            for mode in journey["modes"].values():
+                for sample in mode["samples"]:
+                    planned = plan_samples[sample["request_id"]]
+                    provider_results.append(
+                        {
+                            "request_id": sample["request_id"],
+                            "status": sample["status"],
+                            "travel_mode": sample["travel_mode"],
+                            "distance_meters": sample["distance_meters"],
+                            "duration_seconds": sample["duration_seconds"],
+                            "static_duration_seconds": sample[
+                                "static_duration_seconds"
+                            ],
+                            "warnings": sample["warnings"],
+                            "fallback": sample["fallback"],
+                            "points": [
+                                {"label": point["label"], "place_id": None}
+                                for point in planned["points"]
+                            ],
+                            "legs": sample["legs"],
+                            "attempts": sample["attempts"],
+                        }
+                    )
+        route_result = {
+            "schema_version": "2",
+            "cli_contract_version": "2.0.0",
+            "profile": "itinerary_summary",
+            "status": "success",
+            "results": provider_results,
+        }
         actual = commute_analyzer.analyze_route_results(
             plan,
             route_result,
-            now=datetime(2026, 9, 12, 12, 5, tzinfo=timezone.utc),
+            now=datetime(2099, 1, 5, 12, 0, tzinfo=timezone.utc),
         )
         actual["outputs"] = expected["outputs"]
 
         self.assertEqual(actual, expected)
-        serialized = json.dumps(expected)
-        self.assertNotIn("Example Road", serialized)
-        self.assertNotIn("ChIJExampleCompany", serialized)
+        serialized = json.dumps(expected, ensure_ascii=False)
+        self.assertNotIn("示例市第三路 3 號", serialized)
+        self.assertNotIn("ChIJExampleSchool", serialized)
+        self.assertNotIn('"location"', serialized)
 
 
 if __name__ == "__main__":
