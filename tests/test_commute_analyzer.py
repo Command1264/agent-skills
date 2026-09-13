@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import importlib.util
 import io
 import json
@@ -50,6 +51,42 @@ def dependency() -> dict[str, object]:
     }
 
 
+def itinerary_dependency() -> dict[str, object]:
+    return {
+        "path": "/opt/skills/google-routes",
+        "skill_version": "2.1.0",
+        "cli_contract_version": "2.0.0",
+        "schema_version": "2",
+        "travel_modes": ["DRIVE", "TWO_WHEELER"],
+        "output_profile": "itinerary_summary",
+        "itinerary_limits": {
+            "minimum_points": 2,
+            "maximum_points": 12,
+            "maximum_intermediate_waypoints": 10,
+            "waypoint_order": "fixed",
+        },
+    }
+
+
+def itinerary_capabilities() -> dict[str, object]:
+    return {
+        "skill_name": "google-routes",
+        "skill_version": "2.1.0",
+        "cli_contract_version": "2.0.0",
+        "schema_versions": ["1", "2"],
+        "travel_modes": ["DRIVE", "TWO_WHEELER"],
+        "output_profiles": ["summary", "itinerary_summary"],
+        "itinerary_limits": {
+            "minimum_points": 2,
+            "maximum_points": 12,
+            "maximum_intermediate_waypoints": 10,
+            "waypoint_order": "fixed",
+            "intermediate_type": "stopover",
+            "optimization_supported": False,
+        },
+    }
+
+
 def route_result_for_plan(
     plan: dict[str, object], overrides: dict[str, dict[str, object]] | None = None
 ) -> dict[str, object]:
@@ -89,7 +126,7 @@ def route_result_for_plan(
 
 
 class CapabilitiesTests(unittest.TestCase):
-    def test_capabilities_is_offline_and_describes_v1_1_skill(self) -> None:
+    def test_capabilities_is_offline_and_describes_v2_planning_contract(self) -> None:
         stdout = io.StringIO()
         stderr = io.StringIO()
 
@@ -107,9 +144,12 @@ class CapabilitiesTests(unittest.TestCase):
             json.loads(stdout.getvalue()),
             {
                 "skill_name": "commute-analyzer",
-                "skill_version": "1.1.0",
-                "cli_contract_version": "1.0.0",
-                "schema_versions": ["1"],
+                "skill_version": "2.0.0",
+                "cli_contract_version": "2.0.0",
+                "config_schema_versions": ["1", "2"],
+                "plan_request_schema_versions": ["1", "2"],
+                "plan_schema_versions": ["2"],
+                "result_schema_versions": ["2"],
                 "commands": [
                     "capabilities",
                     "config path",
@@ -120,9 +160,12 @@ class CapabilitiesTests(unittest.TestCase):
                 "required_google_routes": {
                     "skill_major": 2,
                     "cli_contract_version": "2.0.0",
-                    "schema_version": "1",
-                    "travel_modes": ["DRIVE", "TWO_WHEELER"],
-                    "output_profile": "summary",
+                    "schema_version": "2",
+                    "output_profile": "itinerary_summary",
+                    "minimum_points": 2,
+                    "maximum_points": 12,
+                    "maximum_intermediate_waypoints": 10,
+                    "waypoint_order": "fixed",
                 },
                 "default_weeks": 1,
                 "default_weekdays": [1, 2, 3, 4, 5],
@@ -195,6 +238,70 @@ class DependencyTests(unittest.TestCase):
         self.assertEqual(context.exception.code, "GOOGLE_ROUTES_INCOMPATIBLE")
         self.assertIn("更新 google-routes", context.exception.message)
 
+    def test_accepts_fixed_order_itinerary_capabilities(self) -> None:
+        capability_value = {
+            "skill_name": "google-routes",
+            "skill_version": "2.1.0",
+            "cli_contract_version": "2.0.0",
+            "schema_versions": ["1", "2"],
+            "travel_modes": ["DRIVE", "TWO_WHEELER"],
+            "output_profiles": ["summary", "itinerary_summary"],
+            "itinerary_limits": {
+                "minimum_points": 2,
+                "maximum_points": 12,
+                "maximum_intermediate_waypoints": 10,
+                "waypoint_order": "fixed",
+                "intermediate_type": "stopover",
+                "optimization_supported": False,
+            },
+        }
+
+        actual = commute_analyzer.validate_google_routes_capabilities(
+            capability_value, Path("C:/skills/google-routes")
+        )
+
+        self.assertEqual(
+            actual,
+            {
+                "path": str(Path("C:/skills/google-routes").resolve()),
+                "skill_version": "2.1.0",
+                "cli_contract_version": "2.0.0",
+                "schema_version": "2",
+                "travel_modes": ["DRIVE", "TWO_WHEELER"],
+                "output_profile": "itinerary_summary",
+                "itinerary_limits": {
+                    "minimum_points": 2,
+                    "maximum_points": 12,
+                    "maximum_intermediate_waypoints": 10,
+                    "waypoint_order": "fixed",
+                },
+            },
+        )
+
+    def test_rejects_dependency_without_fixed_order_itinerary_contract(self) -> None:
+        capability_value = {
+            "skill_name": "google-routes",
+            "skill_version": "2.1.0",
+            "cli_contract_version": "2.0.0",
+            "schema_versions": ["1", "2"],
+            "travel_modes": ["DRIVE", "TWO_WHEELER"],
+            "output_profiles": ["summary"],
+            "itinerary_limits": {
+                "minimum_points": 2,
+                "maximum_points": 12,
+                "maximum_intermediate_waypoints": 10,
+                "waypoint_order": "optimized",
+            },
+        }
+
+        with self.assertRaises(commute_analyzer.InputError) as context:
+            commute_analyzer.validate_google_routes_capabilities(
+                capability_value, Path("C:/skills/google-routes")
+            )
+
+        self.assertEqual(context.exception.code, "GOOGLE_ROUTES_INCOMPATIBLE")
+        self.assertNotIn("C:/skills", context.exception.message)
+
     def test_google_routes_v1_is_rejected_before_planning(self) -> None:
         capabilities = {
             "skill_name": "google-routes",
@@ -250,42 +357,295 @@ class DependencyTests(unittest.TestCase):
 
 
 class PlanTests(unittest.TestCase):
-    def test_public_examples_reproduce_the_checked_in_plan(self) -> None:
+    @staticmethod
+    def _v2_inputs() -> tuple[dict[str, object], dict[str, object]]:
         examples = ROOT / "skills" / "commute-analyzer" / "examples"
-        config = json.loads((examples / "config.json").read_text(encoding="utf-8"))
+        config = json.loads((examples / "config-v2.json").read_text(encoding="utf-8"))
         request = json.loads(
-            (examples / "plan-request.json").read_text(encoding="utf-8")
+            (examples / "plan-request-v2.json").read_text(encoding="utf-8")
         )
-        expected = json.loads((examples / "plan.json").read_text(encoding="utf-8"))
+        return config, request
+
+    def test_v2_examples_reproduce_the_checked_in_plan_without_mutating_config(self) -> None:
+        examples = ROOT / "skills" / "commute-analyzer" / "examples"
+        config, request = self._v2_inputs()
+        expected = json.loads(
+            (examples / "plan-v2.json").read_text(encoding="utf-8")
+        )
+        original_config = copy.deepcopy(config)
+        original_request = copy.deepcopy(request)
+        dependency_value = itinerary_dependency()
 
         actual = commute_analyzer.build_plan(
             request,
             config,
-            {
-                "path": "/opt/skills/google-routes",
-                "skill_version": "2.0.0",
-                "cli_contract_version": "2.0.0",
-                "schema_version": "1",
-                "travel_modes": ["DRIVE", "TWO_WHEELER"],
-                "output_profile": "summary",
-            },
-            now=datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc),
+            dependency_value,
+            now=datetime(2099, 1, 1, 12, 0, tzinfo=timezone.utc),
         )
 
         self.assertEqual(actual, expected)
+        self.assertEqual(config, original_config)
+        self.assertEqual(request, original_request)
+        dependency_value["itinerary_limits"]["maximum_points"] = 99
+        self.assertEqual(actual["dependency"]["itinerary_limits"]["maximum_points"], 12)
         self.assertEqual(
             commute_analyzer.validate_execution_plan(
-                expected,
-                now=datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc),
+                actual,
+                now=datetime(2099, 1, 1, 12, 0, tzinfo=timezone.utc),
             ),
-            expected,
+            actual,
         )
+
+    def test_v2_preview_contains_labels_but_no_locations(self) -> None:
+        config, request = self._v2_inputs()
+
+        plan = commute_analyzer.build_plan(
+            request,
+            config,
+            itinerary_dependency(),
+            now=datetime(2099, 1, 1, 12, 0, tzinfo=timezone.utc),
+        )
+        preview = json.dumps(plan["preview"], ensure_ascii=False)
+
+        self.assertIn("示例應徵公司", preview)
+        self.assertNotIn("示例市第三路 3 號", preview)
+        self.assertNotIn("ChIJExampleSchool", preview)
+        self.assertNotIn('"location"', preview)
+
+    def test_v2_accepts_twelve_fixed_order_points_and_expands_reverse(self) -> None:
+        config, request = self._v2_inputs()
+        points = [
+            {
+                "label": f"停靠點 {index}",
+                "location": {"address": f"示例市測試路 {index} 號"},
+            }
+            for index in range(1, 13)
+        ]
+        request["journeys"] = [
+            {
+                "id": "twelve-points",
+                "label": "十二點固定路線",
+                "outbound": {"points": points},
+                "return": {"reverse_outbound": True},
+            }
+        ]
+
+        plan = commute_analyzer.build_plan(
+            request,
+            config,
+            itinerary_dependency(),
+            now=datetime(2099, 1, 1, 12, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(plan["samples"][0]["points"], points)
+        self.assertEqual(plan["samples"][1]["points"], list(reversed(points)))
+        self.assertEqual(plan["samples"][0]["expected_leg_count"], 11)
+
+    def test_v2_rejects_thirteen_points(self) -> None:
+        config, request = self._v2_inputs()
+        request["journeys"][0]["outbound"]["points"] = [
+            {
+                "label": f"停靠點 {index}",
+                "location": {"address": f"示例市測試路 {index} 號"},
+            }
+            for index in range(1, 14)
+        ]
+
+        with self.assertRaises(commute_analyzer.InputError) as context:
+            commute_analyzer.build_plan(
+                request,
+                config,
+                itinerary_dependency(),
+                now=datetime(2099, 1, 1, 12, 0, tzinfo=timezone.utc),
+            )
+
+        self.assertEqual(context.exception.code, "INVALID_INPUT")
+        self.assertEqual(context.exception.path, "$.journeys[0].outbound.points")
+
+    def test_v2_rejects_cross_version_inputs(self) -> None:
+        config_v2, request_v2 = self._v2_inputs()
+        cases = [
+            (private_config(), request_v2),
+            (config_v2, {"schema_version": "1"}),
+        ]
+
+        for config, request in cases:
+            with self.subTest(config_version=config["schema_version"]):
+                with self.assertRaises(commute_analyzer.InputError) as context:
+                    commute_analyzer.build_plan(
+                        request,
+                        config,
+                        itinerary_dependency(),
+                        now=datetime(2099, 1, 1, 12, 0, tzinfo=timezone.utc),
+                    )
+                self.assertEqual(
+                    context.exception.code,
+                    "INCOMPATIBLE_INPUT_SCHEMA_VERSIONS",
+                )
+                self.assertEqual(context.exception.path, "$.schema_version")
+
+    def test_v2_rejects_ambiguous_or_unknown_journey_references(self) -> None:
+        config, request = self._v2_inputs()
+        cases: list[tuple[str, dict[str, object], dict[str, object], str, str]] = []
+
+        duplicate_locations = copy.deepcopy(config)
+        duplicate_locations["locations"].append(copy.deepcopy(config["locations"][0]))
+        cases.append(
+            (
+                "duplicate location",
+                duplicate_locations,
+                request,
+                "DUPLICATE_LOCATION_ID",
+                "$config.locations[3].id",
+            )
+        )
+
+        unknown_location = copy.deepcopy(request)
+        unknown_location["journeys"][0]["outbound"]["points"][0] = {
+            "location_id": "missing"
+        }
+        cases.append(
+            (
+                "unknown location",
+                config,
+                unknown_location,
+                "UNKNOWN_LOCATION_ID",
+                "$.journeys[0].outbound.points[0].location_id",
+            )
+        )
+
+        duplicate_journey = copy.deepcopy(request)
+        duplicate_journey["journeys"].append(copy.deepcopy(request["journeys"][0]))
+        cases.append(
+            (
+                "duplicate journey",
+                config,
+                duplicate_journey,
+                "DUPLICATE_JOURNEY_ID",
+                "$.journeys[2].id",
+            )
+        )
+
+        duplicate_label = copy.deepcopy(request)
+        duplicate_label["journeys"][0]["outbound"]["points"][1]["label"] = (
+            "示例住家"
+        )
+        cases.append(
+            (
+                "duplicate label",
+                config,
+                duplicate_label,
+                "DUPLICATE_POINT_LABEL",
+                "$.journeys[0].outbound.points[1].label",
+            )
+        )
+
+        ambiguous_return = copy.deepcopy(request)
+        ambiguous_return["journeys"][0]["return"] = {
+            "reverse_outbound": True,
+            "points": copy.deepcopy(request["journeys"][0]["outbound"]["points"]),
+        }
+        cases.append(
+            (
+                "ambiguous return",
+                config,
+                ambiguous_return,
+                "INVALID_RETURN_DEFINITION",
+                "$.journeys[0].return",
+            )
+        )
+
+        for name, case_config, case_request, code, path in cases:
+            with self.subTest(name=name):
+                with self.assertRaises(commute_analyzer.InputError) as context:
+                    commute_analyzer.build_plan(
+                        case_request,
+                        case_config,
+                        itinerary_dependency(),
+                        now=datetime(2099, 1, 1, 12, 0, tzinfo=timezone.utc),
+                    )
+                self.assertEqual(context.exception.code, code)
+                self.assertEqual(context.exception.path, path)
+
+    def test_v1_adapter_rejects_incompatible_label_at_original_path(self) -> None:
+        config = private_config()
+        config["home"]["label"] = "住" * 81
+
+        with self.assertRaises(commute_analyzer.InputError) as context:
+            commute_analyzer.build_plan(
+                {"schema_version": "1"},
+                config,
+                itinerary_dependency(),
+                now=datetime(2099, 1, 1, 12, 0, tzinfo=timezone.utc),
+            )
+
+        self.assertEqual(context.exception.code, "LEGACY_POINT_LABEL_INCOMPATIBLE")
+        self.assertEqual(context.exception.path, "$config.home.label")
+
+    def test_v1_inputs_are_adapted_to_the_single_v2_journey_plan(self) -> None:
+        plan = commute_analyzer.build_plan(
+            {
+                "schema_version": "1",
+                "start_date": "2099-01-05",
+                "weekdays": [1],
+                "travel_modes": ["TWO_WHEELER"],
+                "additional_companies": [
+                    {
+                        "id": "beta",
+                        "name": "第二家公司",
+                        "location": {"address": "範例市公司路 2 號"},
+                    }
+                ],
+            },
+            private_config(),
+            itinerary_dependency(),
+            now=datetime(2099, 1, 1, 12, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(plan["schema_version"], "2")
+        self.assertEqual(
+            plan["input_compatibility"],
+            {
+                "config_schema_version": "1",
+                "plan_request_schema_version": "1",
+                "adapter": "v1_to_v2",
+            },
+        )
+        self.assertEqual(plan["preview"]["journey_count"], 2)
+        self.assertEqual(plan["preview"]["request_count"], 4)
+        self.assertEqual(
+            plan["samples"][0]["points"],
+            [
+                {"label": "home", "location": {"address": "示例市住家路 1 號"}},
+                {
+                    "label": "範例公司",
+                    "location": {"place_id": "ChIJExampleCompany"},
+                },
+            ],
+        )
+        self.assertEqual(
+            plan["samples"][1]["points"],
+            list(reversed(plan["samples"][0]["points"])),
+        )
+
+    def test_v1_plan_is_rejected_and_must_be_regenerated(self) -> None:
+        examples = ROOT / "skills" / "commute-analyzer" / "examples"
+        legacy_plan = json.loads((examples / "plan.json").read_text(encoding="utf-8"))
+
+        with self.assertRaises(commute_analyzer.InputError) as context:
+            commute_analyzer.validate_execution_plan(
+                legacy_plan,
+                now=datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc),
+            )
+
+        self.assertEqual(context.exception.code, "LEGACY_PLAN_REQUIRES_REGENERATION")
+        self.assertEqual(context.exception.path, "$.schema_version")
 
     def test_default_plan_expands_next_workweek_without_external_calls(self) -> None:
         plan = commute_analyzer.build_plan(
             {"schema_version": "1"},
             private_config(),
-            dependency(),
+            itinerary_dependency(),
             now=datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc),
         )
 
@@ -325,11 +685,19 @@ class PlanTests(unittest.TestCase):
                 self.fail("plan 不得呼叫 google-routes query")
             return 0, json.dumps({
                 "skill_name": "google-routes",
-                "skill_version": "2.0.0",
+                "skill_version": "2.1.0",
                 "cli_contract_version": "2.0.0",
-                "schema_versions": ["1"],
+                "schema_versions": ["1", "2"],
                 "travel_modes": ["DRIVE", "TWO_WHEELER"],
-                "output_profiles": ["summary"],
+                "output_profiles": ["summary", "itinerary_summary"],
+                "itinerary_limits": {
+                    "minimum_points": 2,
+                    "maximum_points": 12,
+                    "maximum_intermediate_waypoints": 10,
+                    "waypoint_order": "fixed",
+                    "intermediate_type": "stopover",
+                    "optimization_supported": False,
+                },
             }), ""
 
         with tempfile.TemporaryDirectory() as temporary:
@@ -359,6 +727,52 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(json.loads(stdout.getvalue())["preview"]["request_count"], 20)
         self.assertIn("不會呼叫 Routes API", stderr.getvalue())
 
+    def test_plan_cli_accepts_v2_and_keeps_locations_out_of_diagnostics(self) -> None:
+        calls: list[str] = []
+
+        def dependency_runner(
+            skill_path: Path,
+            command: str,
+            payload: object,
+            environ: dict[str, str],
+        ) -> tuple[int, str, str]:
+            del skill_path, payload, environ
+            calls.append(command)
+            return 0, json.dumps(itinerary_capabilities()), ""
+
+        config, request = self._v2_inputs()
+        config["locations"][0]["location"] = {
+            "address": "不可出現在診斷的私人地址"
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            google_routes = root / "google-routes"
+            DependencyTests._make_skill(google_routes)
+            config_path = root / "config.json"
+            config_path.write_text(
+                json.dumps(config, ensure_ascii=False), encoding="utf-8"
+            )
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+
+            exit_code = commute_analyzer.run_cli(
+                ["plan", "--config", str(config_path)],
+                stdin=io.StringIO(json.dumps(request, ensure_ascii=False)),
+                stdout=stdout,
+                stderr=stderr,
+                environ={"GOOGLE_ROUTES_SKILL_DIR": str(google_routes)},
+                cwd=root,
+                home=root / "home",
+                platform_name="linux",
+                now=datetime(2099, 1, 1, 12, 0, tzinfo=timezone.utc),
+                dependency_runner=dependency_runner,
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(calls, ["capabilities"])
+        self.assertEqual(json.loads(stdout.getvalue())["schema_version"], "2")
+        self.assertNotIn("不可出現在診斷的私人地址", stderr.getvalue())
+
     def test_plan_uses_visible_legacy_windows_config_with_migration_warning(self) -> None:
         calls: list[str] = []
 
@@ -370,7 +784,7 @@ class PlanTests(unittest.TestCase):
         ) -> tuple[int, str, str]:
             del skill_path, payload, environ
             calls.append(command)
-            return 0, json.dumps(RunTests._compatible_capabilities()), ""
+            return 0, json.dumps(itinerary_capabilities()), ""
 
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -417,7 +831,7 @@ class PlanTests(unittest.TestCase):
         plan = commute_analyzer.build_plan(
             {"schema_version": "1"},
             private_config(),
-            dependency(),
+            itinerary_dependency(),
             now=datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc),
         )
         plan["samples"][0]["departure_time"] = "2026-09-14T09:00:00+08:00"
@@ -434,7 +848,7 @@ class PlanTests(unittest.TestCase):
         plan = commute_analyzer.build_plan(
             {"schema_version": "1"},
             private_config(),
-            dependency(),
+            itinerary_dependency(),
             now=datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc),
         )
         plan["preview"]["maximum_http_requests"] = 999
@@ -454,7 +868,7 @@ class PlanTests(unittest.TestCase):
         plan = commute_analyzer.build_plan(
             {"schema_version": "1"},
             private_config(),
-            dependency(),
+            itinerary_dependency(),
             now=datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc),
         )
         plan["schedule"]["travel_modes"] = ["DRIVE"]
@@ -470,11 +884,75 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(context.exception.code, "INVALID_PLAN")
         self.assertEqual(context.exception.path, "$.schedule.travel_modes")
 
+    def test_rehashed_plan_with_incomplete_sample_matrix_is_rejected(self) -> None:
+        plan = commute_analyzer.build_plan(
+            {"schema_version": "1"},
+            private_config(),
+            itinerary_dependency(),
+            now=datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc),
+        )
+        plan["samples"].pop()
+        plan["preview"]["request_count"] -= 1
+        plan["preview"]["maximum_http_requests"] -= 3
+        plan["preview"]["estimated_sku_requests"]["routes_compute_pro"] -= 1
+        plan["preview"]["planned_leg_count"] -= 1
+        content = {key: value for key, value in plan.items() if key != "plan_id"}
+        plan["plan_id"] = commute_analyzer._content_id(content)
+
+        with self.assertRaises(commute_analyzer.InputError) as context:
+            commute_analyzer.validate_execution_plan(
+                plan,
+                now=datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc),
+            )
+
+        self.assertEqual(context.exception.code, "INVALID_PLAN")
+        self.assertEqual(context.exception.path, "$.samples")
+
+    def test_rehashed_plan_with_departure_outside_schedule_is_rejected(self) -> None:
+        plan = commute_analyzer.build_plan(
+            {"schema_version": "1"},
+            private_config(),
+            itinerary_dependency(),
+            now=datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc),
+        )
+        plan["samples"][0]["departure_time"] = "2026-09-14T09:00:00+08:00"
+        content = {key: value for key, value in plan.items() if key != "plan_id"}
+        plan["plan_id"] = commute_analyzer._content_id(content)
+
+        with self.assertRaises(commute_analyzer.InputError) as context:
+            commute_analyzer.validate_execution_plan(
+                plan,
+                now=datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc),
+            )
+
+        self.assertEqual(context.exception.code, "INVALID_PLAN")
+        self.assertEqual(context.exception.path, "$.samples[0].departure_time")
+
+    def test_rehashed_plan_with_invalid_created_at_is_rejected(self) -> None:
+        plan = commute_analyzer.build_plan(
+            {"schema_version": "1"},
+            private_config(),
+            itinerary_dependency(),
+            now=datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc),
+        )
+        plan["created_at"] = "not-a-date"
+        content = {key: value for key, value in plan.items() if key != "plan_id"}
+        plan["plan_id"] = commute_analyzer._content_id(content)
+
+        with self.assertRaises(commute_analyzer.InputError) as context:
+            commute_analyzer.validate_execution_plan(
+                plan,
+                now=datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc),
+            )
+
+        self.assertEqual(context.exception.code, "INVALID_PLAN")
+        self.assertEqual(context.exception.path, "$.created_at")
+
     def test_expired_plan_is_rejected(self) -> None:
         plan = commute_analyzer.build_plan(
             {"schema_version": "1"},
             private_config(),
-            dependency(),
+            itinerary_dependency(),
             now=datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc),
         )
 
@@ -504,7 +982,7 @@ class PlanTests(unittest.TestCase):
                 ],
             },
             private_config(),
-            dependency(),
+            itinerary_dependency(),
             now=datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc),
         )
 
@@ -514,7 +992,7 @@ class PlanTests(unittest.TestCase):
             "2026-09-22",
             "2026-09-24",
         ])
-        self.assertEqual(plan["preview"]["company_count"], 2)
+        self.assertEqual(plan["preview"]["journey_count"], 2)
         self.assertEqual(plan["preview"]["request_count"], 32)
         self.assertEqual(plan["samples"][0]["departure_time"], "2026-09-15T07:30:00+08:00")
         self.assertEqual(plan["samples"][2]["departure_time"], "2026-09-15T17:45:00+08:00")
@@ -538,6 +1016,47 @@ class RunTests(unittest.TestCase):
             "travel_modes": ["DRIVE", "TWO_WHEELER"],
             "output_profiles": ["summary"],
         }
+
+    def test_legacy_plan_stops_before_dependency_or_private_output(self) -> None:
+        examples = ROOT / "skills" / "commute-analyzer" / "examples"
+        legacy_plan = (examples / "plan.json").read_text(encoding="utf-8")
+        calls: list[str] = []
+
+        def dependency_runner(
+            skill_path: Path,
+            command: str,
+            payload: object,
+            environ: dict[str, str],
+        ) -> tuple[int, str, str]:
+            del skill_path, payload, environ
+            calls.append(command)
+            self.fail("plan v1 不得接觸 dependency")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output_dir = root / "reports"
+            stdout = io.StringIO()
+
+            exit_code = commute_analyzer.run_cli(
+                ["run", "--output-dir", str(output_dir)],
+                stdin=io.StringIO(legacy_plan),
+                stdout=stdout,
+                stderr=io.StringIO(),
+                environ={},
+                cwd=root,
+                home=root / "home",
+                platform_name="linux",
+                now=datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc),
+                dependency_runner=dependency_runner,
+            )
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(calls, [])
+        self.assertFalse(output_dir.exists())
+        self.assertEqual(
+            json.loads(stdout.getvalue())["error"]["code"],
+            "LEGACY_PLAN_REQUIRES_REGENERATION",
+        )
 
     def test_complete_run_calculates_statistics_and_writes_private_outputs(self) -> None:
         calls: list[str] = []
@@ -1068,6 +1587,66 @@ class PrivatePathTests(unittest.TestCase):
 
 
 class ConfigCliTests(unittest.TestCase):
+    def test_config_check_accepts_v2_without_returning_location_content(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            home = root / "home"
+            config_path = (
+                home
+                / ".config"
+                / "command1264-skills"
+                / "commute-analyzer"
+                / "config.json"
+            )
+            config_path.parent.mkdir(parents=True)
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "2",
+                        "locations": [
+                            {
+                                "id": "private-home",
+                                "label": "不可輸出的私人標籤",
+                                "location": {"address": "不可輸出的私人地址"},
+                            }
+                        ],
+                        "utc_offset": "+08:00",
+                        "outbound_departure_time": "08:00",
+                        "return_departure_time": "18:00",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+
+            exit_code = commute_analyzer.run_cli(
+                ["config", "check"],
+                stdin=io.StringIO(""),
+                stdout=stdout,
+                stderr=stderr,
+                environ={},
+                home=home,
+                platform_name="linux",
+            )
+            serialized = stdout.getvalue()
+            result = json.loads(serialized)
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(result["schema_version"], "2")
+        self.assertEqual(result["config"]["content_schema_version"], "2")
+        self.assertEqual(
+            result["config"]["schema_migration"],
+            {
+                "target_schema_version": "2",
+                "recommended": False,
+                "automatic": False,
+            },
+        )
+        self.assertNotIn("不可輸出的私人標籤", serialized)
+        self.assertNotIn("不可輸出的私人地址", serialized)
+
     def test_config_path_reports_cross_runtime_windows_default(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -1302,6 +1881,14 @@ class ConfigCliTests(unittest.TestCase):
         self.assertEqual(result["config"]["source"], "cross_runtime_default")
         self.assertEqual(result["config"]["configured"], True)
         self.assertEqual(result["config"]["content_schema_version"], "1")
+        self.assertEqual(
+            result["config"]["schema_migration"],
+            {
+                "target_schema_version": "2",
+                "recommended": True,
+                "automatic": False,
+            },
+        )
         self.assertNotIn("示例市住家路", serialized)
         self.assertNotIn("ChIJExampleCompany", serialized)
         self.assertNotIn("companies", serialized)

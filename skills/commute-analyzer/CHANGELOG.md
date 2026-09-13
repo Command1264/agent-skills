@@ -2,6 +2,27 @@
 
 所有值得注意的變更都記錄在此。版本遵循 Semantic Versioning。
 
+## [Unreleased]
+
+### Added
+
+- 新增 config／plan request v2 的 Named Locations、任意起訖點、2–12 個固定順序 Points，及可與
+  outbound 不同或由 `reverse_outbound` 展開的 return。
+- 新增單一 v2 Plan Builder；preview 分開計算 Journey、Compute Routes request、route legs、最大
+  HTTP requests 與推定 SKU，且不顯示 address 或 Place ID。
+- 新增 v1 Compatibility Adapter；有效的成對 v1 inputs 會產生 plan v2，不會改寫私人 config。
+
+### Changed
+
+- `capabilities` 與 `config check` 升級為 v2 planning contract，並要求 `google-routes` 提供 schema v2、
+  `itinerary_summary` 與固定順序 waypoint 能力。
+- v2 runtime 將既有 plan v1 視為必須重新離線產生。
+
+### Development status
+
+- 本候選分支只完成 Issue #20 階段 2B 的離線 planning path；plan v2 的 `run`、分析、私人產物與
+  release smoke 必須在階段 2C 完成並通過完整測試後，才能發布 v2.0.0。
+
 ## [1.1.0] - 2026-09-13
 
 ### Added

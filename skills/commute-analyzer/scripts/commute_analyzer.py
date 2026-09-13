@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import hashlib
 import os
@@ -12,10 +13,11 @@ from pathlib import Path
 from typing import Callable, Mapping, TextIO
 
 
-SKILL_VERSION = "1.1.0"
-CLI_CONTRACT_VERSION = "1.0.0"
+SKILL_VERSION = "2.0.0"
+CLI_CONTRACT_VERSION = "2.0.0"
 INSTALL_COMMAND = "npx skills add Command1264/agent-skills --skill google-routes"
 SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+SAFE_REQUEST_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 UTC_OFFSET = re.compile(r"^([+-])(\d{2}):(\d{2})$")
 LOCAL_TIME = re.compile(r"^(\d{2}):(\d{2})$")
 
@@ -80,13 +82,30 @@ def validate_google_routes_capabilities(
         problems.append("skill_version major 必須是 2")
     if capabilities_value.get("cli_contract_version") != "2.0.0":
         problems.append("cli_contract_version 必須是 2.0.0")
-    if "1" not in _string_list(capabilities_value.get("schema_versions")):
-        problems.append("必須支援 schema version 1")
+    if "2" not in _string_list(capabilities_value.get("schema_versions")):
+        problems.append("必須支援 schema version 2")
     modes = set(_string_list(capabilities_value.get("travel_modes")))
     if not {"DRIVE", "TWO_WHEELER"}.issubset(modes):
         problems.append("必須支援 DRIVE 與 TWO_WHEELER")
-    if "summary" not in _string_list(capabilities_value.get("output_profiles")):
-        problems.append("必須支援 summary profile")
+    if "itinerary_summary" not in _string_list(
+        capabilities_value.get("output_profiles")
+    ):
+        problems.append("必須支援 itinerary_summary profile")
+    limits_value = capabilities_value.get("itinerary_limits")
+    limits = limits_value if isinstance(limits_value, dict) else {}
+    required_limits = {
+        "minimum_points": 2,
+        "maximum_points": 12,
+        "maximum_intermediate_waypoints": 10,
+        "waypoint_order": "fixed",
+    }
+    for key, expected in required_limits.items():
+        if limits.get(key) != expected:
+            problems.append(f"itinerary_limits.{key} 必須是 {expected}")
+    if limits.get("intermediate_type") != "stopover":
+        problems.append("itinerary_limits.intermediate_type 必須是 stopover")
+    if limits.get("optimization_supported") is not False:
+        problems.append("itinerary_limits.optimization_supported 必須是 false")
     if problems:
         raise InputError(
             "GOOGLE_ROUTES_INCOMPATIBLE",
@@ -99,9 +118,10 @@ def validate_google_routes_capabilities(
         "path": str(dependency_path.resolve()),
         "skill_version": skill_version,
         "cli_contract_version": "2.0.0",
-        "schema_version": "1",
+        "schema_version": "2",
         "travel_modes": ["DRIVE", "TWO_WHEELER"],
-        "output_profile": "summary",
+        "output_profile": "itinerary_summary",
+        "itinerary_limits": required_limits,
     }
 
 
@@ -118,7 +138,185 @@ def build_plan(
     *,
     now: datetime,
 ) -> dict[str, object]:
+    normalized = _normalize_planning_inputs(request_value, config_value)
+    offset = _parse_utc_offset(normalized["utc_offset"], "$config.utc_offset")
+    local_now = now.astimezone(offset)
+    start = _plan_start_date(normalized.get("start_date"), local_now.date())
+    weeks = _bounded_int(normalized["weeks"], "$.weeks", 1, 4)
+    weekdays = _weekdays(normalized["weekdays"])
+    outbound_time = _local_time(
+        normalized["outbound_departure_time"],
+        "$.outbound_departure_time",
+    )
+    return_time = _local_time(
+        normalized["return_departure_time"],
+        "$.return_departure_time",
+    )
+    modes = _travel_modes(normalized["travel_modes"], "$.travel_modes")
+    rate_limit_qpm = _bounded_int(
+        normalized["rate_limit_qpm"], "$.rate_limit_qpm", 1, 3000
+    )
+    confirmation_threshold = _bounded_int(
+        normalized["confirmation_threshold"],
+        "$.confirmation_threshold",
+        1,
+        1000,
+    )
+
+    selected_dates = [
+        start + timedelta(days=day_index)
+        for day_index in range(weeks * 7)
+        if (start + timedelta(days=day_index)).isoweekday() in weekdays
+    ]
+    if not selected_dates:
+        raise InputError("INVALID_INPUT", "沒有符合 weekdays 的取樣日期", "$.weekdays")
+
+    samples: list[dict[str, object]] = []
+    journeys = normalized["journeys"]
+    assert isinstance(journeys, list)
+    for sample_date in selected_dates:
+        for journey in journeys:
+            assert isinstance(journey, dict)
+            for direction, departure_clock in (
+                ("outbound", outbound_time),
+                ("return", return_time),
+            ):
+                points = journey[direction]
+                assert isinstance(points, list)
+                departure = datetime.combine(sample_date, departure_clock, tzinfo=offset)
+                if departure <= now.astimezone(offset):
+                    raise InputError(
+                        "DEPARTURE_NOT_FUTURE",
+                        "所有 departure_time 都必須晚於目前時間",
+                        "$.start_date",
+                    )
+                for mode in modes:
+                    request_id = ".".join(
+                        [
+                            str(journey["id"]),
+                            sample_date.strftime("%Y%m%d"),
+                            direction,
+                            mode.lower().replace("_", "-"),
+                        ]
+                    )
+                    samples.append(
+                        {
+                            "request_id": request_id,
+                            "journey_id": journey["id"],
+                            "journey_label": journey["label"],
+                            "date": sample_date.isoformat(),
+                            "direction": direction,
+                            "points": points,
+                            "travel_mode": mode,
+                            "departure_time": departure.isoformat(),
+                            "expected_leg_count": len(points) - 1,
+                        }
+                    )
+
+    request_count = len(samples)
+    enterprise = sum(
+        1 for sample in samples if sample["travel_mode"] == "TWO_WHEELER"
+    )
+    pro = request_count - enterprise
+    journey_previews = []
+    for journey in journeys:
+        assert isinstance(journey, dict)
+        directions = []
+        for direction in ("outbound", "return"):
+            points = journey[direction]
+            assert isinstance(points, list)
+            directions.append(
+                {
+                    "direction": direction,
+                    "point_labels": [point["label"] for point in points],
+                    "point_count": len(points),
+                    "intermediate_count": len(points) - 2,
+                    "leg_count": len(points) - 1,
+                }
+            )
+        journey_previews.append(
+            {
+                "journey_id": journey["id"],
+                "journey_label": journey["label"],
+                "directions": directions,
+            }
+        )
+    plan_without_id: dict[str, object] = {
+        "schema_version": "2",
+        "plan_contract_version": "2.0.0",
+        "created_at": now.isoformat(),
+        "input_compatibility": {
+            "config_schema_version": normalized["config_schema_version"],
+            "plan_request_schema_version": normalized[
+                "plan_request_schema_version"
+            ],
+            "adapter": normalized["adapter"],
+        },
+        "dependency": copy.deepcopy(dict(dependency_value)),
+        "schedule": {
+            "start_date": start.isoformat(),
+            "end_date": (start + timedelta(days=weeks * 7 - 1)).isoformat(),
+            "weeks": weeks,
+            "weekdays": weekdays,
+            "dates": [item.isoformat() for item in selected_dates],
+            "utc_offset": normalized["utc_offset"],
+            "outbound_departure_time": outbound_time.strftime("%H:%M"),
+            "return_departure_time": return_time.strftime("%H:%M"),
+            "travel_modes": modes,
+        },
+        "preview": {
+            "journey_count": len(journeys),
+            "request_count": request_count,
+            "planned_leg_count": sum(
+                int(sample["expected_leg_count"]) for sample in samples
+            ),
+            "retry_limit": 2,
+            "maximum_http_requests": request_count * 3,
+            "rate_limit_qpm": rate_limit_qpm,
+            "local_rate_limit_only": True,
+            "confirmation_threshold": confirmation_threshold,
+            "confirmation_required": request_count > confirmation_threshold,
+            "estimated_sku_requests": {
+                "routes_compute_pro": pro,
+                "routes_compute_enterprise": enterprise,
+            },
+            "journeys": journey_previews,
+        },
+        "samples": samples,
+    }
+    return {
+        **plan_without_id,
+        "plan_id": _content_id(plan_without_id),
+    }
+
+
+def _normalize_planning_inputs(
+    request_value: object, config_value: object
+) -> dict[str, object]:
     request = _require_object(request_value, "$")
+    config = _require_object(config_value, "$config")
+    request_version = request.get("schema_version")
+    config_version = config.get("schema_version")
+    if request_version != config_version:
+        raise InputError(
+            "INCOMPATIBLE_INPUT_SCHEMA_VERSIONS",
+            "config 與 plan request 必須同為 schema version 1 或 2",
+            "$.schema_version",
+        )
+    if request_version == "1":
+        return _normalize_v1_inputs(request, config)
+    if request_version == "2":
+        return _normalize_v2_inputs(request, config)
+    raise InputError(
+        "INVALID_INPUT",
+        "schema_version 必須是 1 或 2",
+        "$.schema_version",
+    )
+
+
+def _normalize_v1_inputs(
+    request: Mapping[str, object], config_value: Mapping[str, object]
+) -> dict[str, object]:
     _reject_unknown(
         request,
         {
@@ -136,146 +334,915 @@ def build_plan(
         },
         "$",
     )
-    if request.get("schema_version") != "1":
-        raise InputError("INVALID_INPUT", "schema_version 必須是 1", "$.schema_version")
     if request.get("schedule_mode", "fixed_departure") != "fixed_departure":
         raise InputError(
             "UNSUPPORTED_SCHEDULE_MODE",
             "v1 只支援 fixed_departure；target_arrival 尚未支援",
             "$.schedule_mode",
         )
-
     config = _validate_config(config_value)
-    offset = _parse_utc_offset(config["utc_offset"], "$.utc_offset")
-    local_now = now.astimezone(offset)
-    start = _plan_start_date(request.get("start_date"), local_now.date())
-    weeks = _bounded_int(request.get("weeks", 1), "$.weeks", 1, 4)
-    weekdays = _weekdays(request.get("weekdays", [1, 2, 3, 4, 5]))
-    morning = _local_time(
-        request.get("morning_departure_time", config["morning_departure_time"]),
-        "$.morning_departure_time",
-    )
-    evening = _local_time(
-        request.get("evening_departure_time", config["evening_departure_time"]),
-        "$.evening_departure_time",
-    )
-    modes = _travel_modes(
-        request.get("travel_modes", ["TWO_WHEELER", "DRIVE"]),
-        "$.travel_modes",
-    )
-    rate_limit_qpm = _bounded_int(
-        request.get("rate_limit_qpm", 60), "$.rate_limit_qpm", 1, 3000
-    )
-    confirmation_threshold = _bounded_int(
-        request.get("confirmation_threshold", 20),
-        "$.confirmation_threshold",
-        1,
-        1000,
+    home = config["home"]
+    assert isinstance(home, dict)
+    home_label = _label(
+        home["label"], "$config.home.label", "LEGACY_POINT_LABEL_INCOMPATIBLE"
     )
     companies = list(config["companies"])
+    company_paths = [
+        f"$config.companies[{index}]" for index in range(len(companies))
+    ]
     additional = request.get("additional_companies", [])
     if not isinstance(additional, list):
         raise InputError("INVALID_INPUT", "必須是 array", "$.additional_companies")
-    for index, company in enumerate(additional):
-        companies.append(_validate_company(company, f"$.additional_companies[{index}]"))
-    _reject_duplicate_company_ids(companies)
-
-    selected_dates = [
-        start + timedelta(days=day_index)
-        for day_index in range(weeks * 7)
-        if (start + timedelta(days=day_index)).isoweekday() in weekdays
-    ]
-    if not selected_dates:
-        raise InputError("INVALID_INPUT", "沒有符合 weekdays 的取樣日期", "$.weekdays")
-
-    samples: list[dict[str, object]] = []
-    home = config["home"]
-    for sample_date in selected_dates:
-        for company in companies:
-            for direction, departure_clock in (
-                ("outbound", morning),
-                ("return", evening),
-            ):
-                if direction == "outbound":
-                    origin, destination = home, company
-                else:
-                    origin, destination = company, home
-                departure = datetime.combine(sample_date, departure_clock, tzinfo=offset)
-                if departure <= now.astimezone(offset):
-                    raise InputError(
-                        "DEPARTURE_NOT_FUTURE",
-                        "所有 departure_time 都必須晚於目前時間",
-                        "$.start_date",
-                    )
-                for mode in modes:
-                    request_id = ".".join(
-                        [
-                            str(company["id"]),
-                            sample_date.strftime("%Y%m%d"),
-                            direction,
-                            mode.lower().replace("_", "-"),
-                        ]
-                    )
-                    samples.append(
-                        {
-                            "request_id": request_id,
-                            "company_id": company["id"],
-                            "company_name": company["name"],
-                            "date": sample_date.isoformat(),
-                            "direction": direction,
-                            "origin_label": origin["label"],
-                            "destination_label": destination["label"],
-                            "origin": origin["location"],
-                            "destination": destination["location"],
-                            "travel_mode": mode,
-                            "departure_time": departure.isoformat(),
-                        }
-                    )
-
-    request_count = len(samples)
-    enterprise = sum(
-        1 for sample in samples if sample["travel_mode"] == "TWO_WHEELER"
-    )
-    pro = request_count - enterprise
-    plan_without_id: dict[str, object] = {
-        "schema_version": "1",
-        "plan_contract_version": "1.0.0",
-        "created_at": now.isoformat(),
-        "dependency": dict(dependency_value),
-        "schedule": {
-            "start_date": start.isoformat(),
-            "end_date": (start + timedelta(days=weeks * 7 - 1)).isoformat(),
-            "weeks": weeks,
-            "weekdays": weekdays,
-            "dates": [item.isoformat() for item in selected_dates],
-            "utc_offset": config["utc_offset"],
-            "morning_departure_time": morning.strftime("%H:%M"),
-            "evening_departure_time": evening.strftime("%H:%M"),
-            "travel_modes": modes,
-        },
-        "preview": {
-            "company_count": len(companies),
-            "request_count": request_count,
-            "retry_limit": 2,
-            "maximum_http_requests": request_count * 3,
-            "rate_limit_qpm": rate_limit_qpm,
-            "local_rate_limit_only": True,
-            "confirmation_threshold": confirmation_threshold,
-            "confirmation_required": request_count > confirmation_threshold,
-            "estimated_sku_requests": {
-                "routes_compute_pro": pro,
-                "routes_compute_enterprise": enterprise,
-            },
-        },
-        "samples": samples,
-    }
+    for index, company_value in enumerate(additional):
+        path = f"$.additional_companies[{index}]"
+        companies.append(_validate_company(company_value, path))
+        company_paths.append(path)
+    seen_company_ids: set[str] = set()
+    journeys: list[dict[str, object]] = []
+    for company, path in zip(companies, company_paths):
+        assert isinstance(company, dict)
+        company_id = str(company["id"])
+        if company_id in seen_company_ids:
+            raise InputError(
+                "INVALID_INPUT", "company id 不得重複", f"{path}.id"
+            )
+        seen_company_ids.add(company_id)
+        company_label = _label(
+            company["name"],
+            f"{path}.name",
+            "LEGACY_POINT_LABEL_INCOMPATIBLE",
+        )
+        if company_label == home_label:
+            raise InputError(
+                "DUPLICATE_POINT_LABEL",
+                "同一 direction 的 Point label 不得重複",
+                f"{path}.name",
+            )
+        outbound = [
+            {"label": home_label, "location": dict(home["location"])},
+            {"label": company_label, "location": dict(company["location"])},
+        ]
+        journeys.append(
+            {
+                "id": company_id,
+                "label": company_label,
+                "outbound": outbound,
+                "return": [
+                    {"label": point["label"], "location": dict(point["location"])}
+                    for point in reversed(outbound)
+                ],
+            }
+        )
     return {
-        **plan_without_id,
-        "plan_id": _content_id(plan_without_id),
+        "config_schema_version": "1",
+        "plan_request_schema_version": "1",
+        "adapter": "v1_to_v2",
+        "start_date": request.get("start_date"),
+        "weeks": request.get("weeks", 1),
+        "weekdays": request.get("weekdays", [1, 2, 3, 4, 5]),
+        "outbound_departure_time": request.get(
+            "morning_departure_time", config["morning_departure_time"]
+        ),
+        "return_departure_time": request.get(
+            "evening_departure_time", config["evening_departure_time"]
+        ),
+        "travel_modes": request.get("travel_modes", ["TWO_WHEELER", "DRIVE"]),
+        "rate_limit_qpm": request.get("rate_limit_qpm", 60),
+        "confirmation_threshold": request.get("confirmation_threshold", 20),
+        "utc_offset": config["utc_offset"],
+        "journeys": journeys,
     }
+
+
+def _normalize_v2_inputs(
+    request: Mapping[str, object], config: Mapping[str, object]
+) -> dict[str, object]:
+    validated_config = _validate_v2_config(config)
+    locations = validated_config["location_catalog"]
+    assert isinstance(locations, dict)
+    utc_offset = str(validated_config["utc_offset"])
+    config_outbound_time = str(validated_config["outbound_departure_time"])
+    config_return_time = str(validated_config["return_departure_time"])
+
+    _reject_unknown(
+        request,
+        {
+            "schema_version",
+            "start_date",
+            "weeks",
+            "weekdays",
+            "outbound_departure_time",
+            "return_departure_time",
+            "travel_modes",
+            "rate_limit_qpm",
+            "confirmation_threshold",
+            "schedule_mode",
+            "journeys",
+        },
+        "$",
+    )
+    _require_fields(request, {"schema_version", "journeys"}, "$", "INVALID_INPUT")
+    if request.get("schedule_mode", "fixed_departure") != "fixed_departure":
+        raise InputError(
+            "UNSUPPORTED_SCHEDULE_MODE",
+            "v2 只支援 fixed_departure；target_arrival 尚未支援",
+            "$.schedule_mode",
+        )
+    journeys_value = request["journeys"]
+    if not isinstance(journeys_value, list) or not journeys_value:
+        raise InputError("INVALID_INPUT", "journeys 必須是非空 array", "$.journeys")
+    journeys: list[dict[str, object]] = []
+    journey_ids: set[str] = set()
+    for index, item in enumerate(journeys_value):
+        path = f"$.journeys[{index}]"
+        journey = _require_object(item, path)
+        _reject_unknown(journey, {"id", "label", "outbound", "return"}, path)
+        _require_fields(
+            journey,
+            {"id", "label", "outbound", "return"},
+            path,
+            "INVALID_INPUT",
+        )
+        journey_id = _safe_id(journey["id"], f"{path}.id", "INVALID_INPUT")
+        if journey_id in journey_ids:
+            raise InputError(
+                "DUPLICATE_JOURNEY_ID",
+                "Commute Journey id 不得重複",
+                f"{path}.id",
+            )
+        journey_ids.add(journey_id)
+        outbound = _resolve_direction(
+            journey["outbound"], f"{path}.outbound", locations
+        )
+        return_value = _require_object(journey["return"], f"{path}.return")
+        if set(return_value) == {"reverse_outbound"}:
+            if return_value["reverse_outbound"] is not True:
+                raise InputError(
+                    "INVALID_RETURN_DEFINITION",
+                    "reverse_outbound 必須是 true",
+                    f"{path}.return.reverse_outbound",
+                )
+            return_points = [
+                {"label": point["label"], "location": dict(point["location"])}
+                for point in reversed(outbound)
+            ]
+        elif set(return_value) == {"points"}:
+            return_points = _resolve_points(
+                return_value["points"], f"{path}.return.points", locations
+            )
+        else:
+            raise InputError(
+                "INVALID_RETURN_DEFINITION",
+                "return 必須且只能提供 points 或 reverse_outbound: true",
+                f"{path}.return",
+            )
+        journeys.append(
+            {
+                "id": journey_id,
+                "label": _label(journey["label"], f"{path}.label", "INVALID_INPUT"),
+                "outbound": outbound,
+                "return": return_points,
+            }
+        )
+    return {
+        "config_schema_version": "2",
+        "plan_request_schema_version": "2",
+        "adapter": None,
+        "start_date": request.get("start_date"),
+        "weeks": request.get("weeks", 1),
+        "weekdays": request.get("weekdays", [1, 2, 3, 4, 5]),
+        "outbound_departure_time": request.get(
+            "outbound_departure_time", config_outbound_time
+        ),
+        "return_departure_time": request.get(
+            "return_departure_time", config_return_time
+        ),
+        "travel_modes": request.get("travel_modes", ["TWO_WHEELER", "DRIVE"]),
+        "rate_limit_qpm": request.get("rate_limit_qpm", 60),
+        "confirmation_threshold": request.get("confirmation_threshold", 20),
+        "utc_offset": utc_offset,
+        "journeys": journeys,
+    }
+
+
+def _validate_v2_config(config: Mapping[str, object]) -> dict[str, object]:
+    _reject_unknown(
+        config,
+        {
+            "schema_version",
+            "locations",
+            "utc_offset",
+            "outbound_departure_time",
+            "return_departure_time",
+        },
+        "$config",
+    )
+    _require_fields(
+        config,
+        {
+            "schema_version",
+            "locations",
+            "utc_offset",
+            "outbound_departure_time",
+            "return_departure_time",
+        },
+        "$config",
+        "INVALID_CONFIG",
+    )
+    if config["schema_version"] != "2":
+        raise InputError(
+            "INVALID_CONFIG", "schema_version 必須是 2", "$config.schema_version"
+        )
+    locations_value = config["locations"]
+    if not isinstance(locations_value, list):
+        raise InputError("INVALID_CONFIG", "必須是 array", "$config.locations")
+    locations: dict[str, dict[str, object]] = {}
+    for index, item in enumerate(locations_value):
+        path = f"$config.locations[{index}]"
+        location_item = _require_object(item, path)
+        _reject_unknown(location_item, {"id", "label", "location"}, path)
+        _require_fields(
+            location_item,
+            {"id", "label", "location"},
+            path,
+            "INVALID_CONFIG",
+        )
+        location_id = _safe_id(location_item["id"], f"{path}.id", "INVALID_CONFIG")
+        if location_id in locations:
+            raise InputError(
+                "DUPLICATE_LOCATION_ID",
+                "Named Location id 不得重複",
+                f"{path}.id",
+            )
+        locations[location_id] = {
+            "label": _label(location_item["label"], f"{path}.label", "INVALID_CONFIG"),
+            "location": _validate_location(
+                location_item["location"], f"{path}.location"
+            ),
+        }
+    utc_offset = _nonempty_string(config["utc_offset"], "$config.utc_offset")
+    _parse_utc_offset(utc_offset, "$config.utc_offset")
+    config_outbound_time = _nonempty_string(
+        config["outbound_departure_time"], "$config.outbound_departure_time"
+    )
+    config_return_time = _nonempty_string(
+        config["return_departure_time"], "$config.return_departure_time"
+    )
+    _local_time(config_outbound_time, "$config.outbound_departure_time")
+    _local_time(config_return_time, "$config.return_departure_time")
+    return {
+        "schema_version": "2",
+        "utc_offset": utc_offset,
+        "outbound_departure_time": config_outbound_time,
+        "return_departure_time": config_return_time,
+        "location_catalog": locations,
+    }
+
+
+def _resolve_direction(
+    value: object, path: str, locations: Mapping[str, dict[str, object]]
+) -> list[dict[str, object]]:
+    direction = _require_object(value, path)
+    _reject_unknown(direction, {"points"}, path)
+    _require_fields(direction, {"points"}, path, "INVALID_INPUT")
+    return _resolve_points(direction["points"], f"{path}.points", locations)
+
+
+def _resolve_points(
+    value: object, path: str, locations: Mapping[str, dict[str, object]]
+) -> list[dict[str, object]]:
+    if not isinstance(value, list) or not 2 <= len(value) <= 12:
+        raise InputError("INVALID_INPUT", "points 必須包含 2 到 12 個項目", path)
+    points: list[dict[str, object]] = []
+    labels: set[str] = set()
+    for index, item in enumerate(value):
+        item_path = f"{path}[{index}]"
+        point = _require_object(item, item_path)
+        if set(point) == {"location_id"}:
+            location_id = _safe_id(
+                point["location_id"], f"{item_path}.location_id", "INVALID_INPUT"
+            )
+            if location_id not in locations:
+                raise InputError(
+                    "UNKNOWN_LOCATION_ID",
+                    "找不到 Named Location id",
+                    f"{item_path}.location_id",
+                )
+            source = locations[location_id]
+            resolved = {
+                "label": source["label"],
+                "location": dict(source["location"]),
+            }
+        elif set(point) == {"label", "location"}:
+            resolved = {
+                "label": _label(point["label"], f"{item_path}.label", "INVALID_INPUT"),
+                "location": _validate_location(
+                    point["location"], f"{item_path}.location"
+                ),
+            }
+        else:
+            raise InputError(
+                "INVALID_INPUT",
+                "Point 必須且只能使用 location_id，或 label 與 location",
+                item_path,
+            )
+        label = str(resolved["label"])
+        if label in labels:
+            raise InputError(
+                "DUPLICATE_POINT_LABEL",
+                "同一 direction 的 Point label 不得重複",
+                f"{item_path}.label",
+            )
+        labels.add(label)
+        points.append(resolved)
+    return points
+
+
+def _require_fields(
+    value: Mapping[str, object],
+    required: set[str],
+    path: str,
+    code: str,
+) -> None:
+    missing = sorted(required - value.keys())
+    if missing:
+        raise InputError(code, "缺少必要欄位", f"{path}.{missing[0]}")
+
+
+def _safe_id(value: object, path: str, code: str) -> str:
+    text = _nonempty_string(value, path)
+    if not SAFE_ID.fullmatch(text):
+        raise InputError(code, "id 必須是安全識別符", path)
+    return text
+
+
+def _label(value: object, path: str, code: str) -> str:
+    text = _nonempty_string(value, path)
+    if len(text) > 80:
+        raise InputError(code, "label 最多 80 個字元", path)
+    return text
 
 
 def validate_execution_plan(value: object, *, now: datetime) -> dict[str, object]:
+    plan = _require_object(value, "$")
+    if plan.get("schema_version") == "1":
+        raise InputError(
+            "LEGACY_PLAN_REQUIRES_REGENERATION",
+            "commute-analyzer v2 不執行 plan v1；請以原始 config 與 request 重新執行 plan",
+            "$.schema_version",
+        )
+    return _validate_execution_plan_v2(plan, now=now)
+
+
+def _validate_execution_plan_v2(
+    plan: Mapping[str, object], *, now: datetime
+) -> dict[str, object]:
+    _reject_unknown(
+        plan,
+        {
+            "schema_version",
+            "plan_contract_version",
+            "created_at",
+            "input_compatibility",
+            "dependency",
+            "schedule",
+            "preview",
+            "samples",
+            "plan_id",
+        },
+        "$",
+    )
+    _require_fields(
+        plan,
+        {
+            "schema_version",
+            "plan_contract_version",
+            "created_at",
+            "input_compatibility",
+            "dependency",
+            "schedule",
+            "preview",
+            "samples",
+            "plan_id",
+        },
+        "$",
+        "INVALID_PLAN",
+    )
+    if plan["schema_version"] != "2":
+        raise InputError("INVALID_PLAN", "schema_version 必須是 2", "$.schema_version")
+    if plan["plan_contract_version"] != "2.0.0":
+        raise InputError(
+            "INVALID_PLAN",
+            "plan_contract_version 必須是 2.0.0",
+            "$.plan_contract_version",
+        )
+    created_at = _nonempty_string(plan["created_at"], "$.created_at")
+    try:
+        created = datetime.fromisoformat(created_at)
+    except ValueError as exc:
+        raise InputError(
+            "INVALID_PLAN", "created_at 必須是 ISO 8601 date-time", "$.created_at"
+        ) from exc
+    if created.tzinfo is None or created.utcoffset() is None:
+        raise InputError(
+            "INVALID_PLAN", "created_at 必須包含 UTC offset", "$.created_at"
+        )
+    plan_id = _nonempty_string(plan["plan_id"], "$.plan_id")
+    content = {key: item for key, item in plan.items() if key != "plan_id"}
+    if plan_id != _content_id(content):
+        raise InputError(
+            "PLAN_ID_MISMATCH",
+            "plan 內容已改變；請重新執行 plan，並使用新的 plan_id",
+            "$.plan_id",
+        )
+    _validate_input_compatibility(plan["input_compatibility"])
+    _validate_plan_dependency(plan["dependency"])
+
+    samples = plan["samples"]
+    if not isinstance(samples, list) or not samples:
+        raise InputError("INVALID_PLAN", "samples 必須是非空 array", "$.samples")
+    request_ids: set[str] = set()
+    mode_counts = {"DRIVE": 0, "TWO_WHEELER": 0}
+    journey_definitions: dict[str, dict[str, object]] = {}
+    sample_dates: set[str] = set()
+    planned_leg_count = 0
+    for index, sample_value in enumerate(samples):
+        path = f"$.samples[{index}]"
+        sample = _require_object(sample_value, path)
+        _reject_unknown(
+            sample,
+            {
+                "request_id",
+                "journey_id",
+                "journey_label",
+                "date",
+                "direction",
+                "points",
+                "travel_mode",
+                "departure_time",
+                "expected_leg_count",
+            },
+            path,
+        )
+        _require_fields(
+            sample,
+            {
+                "request_id",
+                "journey_id",
+                "journey_label",
+                "date",
+                "direction",
+                "points",
+                "travel_mode",
+                "departure_time",
+                "expected_leg_count",
+            },
+            path,
+            "INVALID_PLAN",
+        )
+        request_id = _nonempty_string(sample["request_id"], f"{path}.request_id")
+        if not SAFE_REQUEST_ID.fullmatch(request_id):
+            raise InputError(
+                "INVALID_PLAN", "request_id 必須是安全識別符", f"{path}.request_id"
+            )
+        if request_id in request_ids:
+            raise InputError(
+                "INVALID_PLAN", "request_id 不得重複", f"{path}.request_id"
+            )
+        request_ids.add(request_id)
+        journey_id = _safe_id(sample["journey_id"], f"{path}.journey_id", "INVALID_PLAN")
+        journey_label = _label(
+            sample["journey_label"], f"{path}.journey_label", "INVALID_PLAN"
+        )
+        direction = sample["direction"]
+        if direction not in {"outbound", "return"}:
+            raise InputError(
+                "INVALID_PLAN",
+                "direction 必須是 outbound 或 return",
+                f"{path}.direction",
+            )
+        points = _validate_resolved_points(sample["points"], f"{path}.points")
+        expected_leg_count = sample["expected_leg_count"]
+        if expected_leg_count != len(points) - 1:
+            raise InputError(
+                "INVALID_PLAN",
+                "expected_leg_count 必須等於 points 數量減一",
+                f"{path}.expected_leg_count",
+            )
+        planned_leg_count += int(expected_leg_count)
+        mode = sample["travel_mode"]
+        if mode not in mode_counts:
+            raise InputError(
+                "INVALID_PLAN",
+                "travel_mode 必須是 DRIVE 或 TWO_WHEELER",
+                f"{path}.travel_mode",
+            )
+        mode_counts[str(mode)] += 1
+        sample_date = _nonempty_string(sample["date"], f"{path}.date")
+        try:
+            parsed_sample_date = date.fromisoformat(sample_date)
+        except ValueError as exc:
+            raise InputError(
+                "INVALID_PLAN", "date 必須是 YYYY-MM-DD", f"{path}.date"
+            ) from exc
+        sample_dates.add(sample_date)
+        departure_text = _nonempty_string(
+            sample["departure_time"], f"{path}.departure_time"
+        )
+        try:
+            departure = datetime.fromisoformat(departure_text)
+        except ValueError as exc:
+            raise InputError(
+                "INVALID_PLAN",
+                "departure_time 必須是 ISO 8601 date-time",
+                f"{path}.departure_time",
+            ) from exc
+        if departure.tzinfo is None or departure.utcoffset() is None:
+            raise InputError(
+                "INVALID_PLAN",
+                "departure_time 必須包含 UTC offset",
+                f"{path}.departure_time",
+            )
+        if departure <= now.astimezone(departure.tzinfo):
+            raise InputError(
+                "PLAN_EXPIRED",
+                "plan 含有已到期的 departure_time；請重新執行 plan",
+                f"{path}.departure_time",
+            )
+        if departure.date() != parsed_sample_date:
+            raise InputError(
+                "INVALID_PLAN",
+                "date 必須與 departure_time 的本地日期一致",
+                f"{path}.date",
+            )
+        definition = journey_definitions.setdefault(
+            journey_id,
+            {"label": journey_label, "directions": {}},
+        )
+        if definition["label"] != journey_label:
+            raise InputError(
+                "INVALID_PLAN",
+                "同一 journey_id 的 label 必須一致",
+                f"{path}.journey_label",
+            )
+        directions = definition["directions"]
+        assert isinstance(directions, dict)
+        point_labels = [point["label"] for point in points]
+        if direction in directions and directions[direction] != point_labels:
+            raise InputError(
+                "INVALID_PLAN",
+                "同一 Journey direction 的 Points 必須一致",
+                f"{path}.points",
+            )
+        directions[direction] = point_labels
+
+    preview = _require_object(plan["preview"], "$.preview")
+    _validate_v2_preview(
+        preview,
+        samples=samples,
+        planned_leg_count=planned_leg_count,
+        mode_counts=mode_counts,
+        journey_definitions=journey_definitions,
+    )
+    _validate_v2_schedule(
+        plan["schedule"],
+        sample_dates=sample_dates,
+        mode_counts=mode_counts,
+        samples=samples,
+        journey_ids=set(journey_definitions),
+    )
+    return dict(plan)
+
+
+def _validate_input_compatibility(value: object) -> None:
+    compatibility = _require_object(value, "$.input_compatibility")
+    _reject_unknown(
+        compatibility,
+        {"config_schema_version", "plan_request_schema_version", "adapter"},
+        "$.input_compatibility",
+    )
+    _require_fields(
+        compatibility,
+        {"config_schema_version", "plan_request_schema_version", "adapter"},
+        "$.input_compatibility",
+        "INVALID_PLAN",
+    )
+    pair = (
+        compatibility["config_schema_version"],
+        compatibility["plan_request_schema_version"],
+        compatibility["adapter"],
+    )
+    if pair not in {("1", "1", "v1_to_v2"), ("2", "2", None)}:
+        raise InputError(
+            "INVALID_PLAN",
+            "input_compatibility 與 adapter 不一致",
+            "$.input_compatibility",
+        )
+
+
+def _validate_plan_dependency(value: object) -> None:
+    dependency = _require_object(value, "$.dependency")
+    _reject_unknown(
+        dependency,
+        {
+            "path",
+            "skill_version",
+            "cli_contract_version",
+            "schema_version",
+            "travel_modes",
+            "output_profile",
+            "itinerary_limits",
+        },
+        "$.dependency",
+    )
+    _require_fields(
+        dependency,
+        {
+            "path",
+            "skill_version",
+            "cli_contract_version",
+            "schema_version",
+            "travel_modes",
+            "output_profile",
+            "itinerary_limits",
+        },
+        "$.dependency",
+        "INVALID_PLAN",
+    )
+    _nonempty_string(dependency["path"], "$.dependency.path")
+    version = _nonempty_string(dependency["skill_version"], "$.dependency.skill_version")
+    if version.split(".", 1)[0] != "2":
+        raise InputError(
+            "INVALID_PLAN", "skill_version major 必須是 2", "$.dependency.skill_version"
+        )
+    expected = {
+        "cli_contract_version": "2.0.0",
+        "schema_version": "2",
+        "travel_modes": ["DRIVE", "TWO_WHEELER"],
+        "output_profile": "itinerary_summary",
+    }
+    for key, expected_value in expected.items():
+        if dependency[key] != expected_value:
+            raise InputError(
+                "INVALID_PLAN", f"{key} 不相容", f"$.dependency.{key}"
+            )
+    limits = _require_object(dependency["itinerary_limits"], "$.dependency.itinerary_limits")
+    required_limits = {
+        "minimum_points": 2,
+        "maximum_points": 12,
+        "maximum_intermediate_waypoints": 10,
+        "waypoint_order": "fixed",
+    }
+    if limits != required_limits:
+        raise InputError(
+            "INVALID_PLAN",
+            "itinerary_limits 不相容",
+            "$.dependency.itinerary_limits",
+        )
+
+
+def _validate_resolved_points(value: object, path: str) -> list[dict[str, object]]:
+    if not isinstance(value, list) or not 2 <= len(value) <= 12:
+        raise InputError("INVALID_PLAN", "points 必須包含 2 到 12 個項目", path)
+    points: list[dict[str, object]] = []
+    labels: set[str] = set()
+    for index, item in enumerate(value):
+        item_path = f"{path}[{index}]"
+        point = _require_object(item, item_path)
+        _reject_unknown(point, {"label", "location"}, item_path)
+        _require_fields(
+            point, {"label", "location"}, item_path, "INVALID_PLAN"
+        )
+        label = _label(point["label"], f"{item_path}.label", "INVALID_PLAN")
+        if label in labels:
+            raise InputError(
+                "INVALID_PLAN", "Point label 不得重複", f"{item_path}.label"
+            )
+        labels.add(label)
+        points.append(
+            {
+                "label": label,
+                "location": _validate_location(
+                    point["location"], f"{item_path}.location"
+                ),
+            }
+        )
+    return points
+
+
+def _validate_v2_preview(
+    preview: Mapping[str, object],
+    *,
+    samples: list[object],
+    planned_leg_count: int,
+    mode_counts: Mapping[str, int],
+    journey_definitions: Mapping[str, dict[str, object]],
+) -> None:
+    allowed = {
+        "journey_count",
+        "request_count",
+        "planned_leg_count",
+        "retry_limit",
+        "maximum_http_requests",
+        "rate_limit_qpm",
+        "local_rate_limit_only",
+        "confirmation_threshold",
+        "confirmation_required",
+        "estimated_sku_requests",
+        "journeys",
+    }
+    _reject_unknown(preview, allowed, "$.preview")
+    _require_fields(preview, allowed, "$.preview", "INVALID_PLAN")
+    request_count = len(samples)
+    checks = {
+        "journey_count": len(journey_definitions),
+        "request_count": request_count,
+        "planned_leg_count": planned_leg_count,
+        "retry_limit": 2,
+        "maximum_http_requests": request_count * 3,
+        "local_rate_limit_only": True,
+    }
+    for key, expected in checks.items():
+        if preview[key] != expected:
+            raise InputError(
+                "INVALID_PLAN", f"{key} 與 samples 不一致", f"$.preview.{key}"
+            )
+    _bounded_int(preview["rate_limit_qpm"], "$.preview.rate_limit_qpm", 1, 3000)
+    threshold = _bounded_int(
+        preview["confirmation_threshold"],
+        "$.preview.confirmation_threshold",
+        1,
+        1000,
+    )
+    if preview["confirmation_required"] is not (request_count > threshold):
+        raise InputError(
+            "INVALID_PLAN",
+            "confirmation_required 與 request_count 不一致",
+            "$.preview.confirmation_required",
+        )
+    expected_sku = {
+        "routes_compute_pro": mode_counts["DRIVE"],
+        "routes_compute_enterprise": mode_counts["TWO_WHEELER"],
+    }
+    if preview["estimated_sku_requests"] != expected_sku:
+        raise InputError(
+            "INVALID_PLAN",
+            "estimated_sku_requests 與 samples 不一致",
+            "$.preview.estimated_sku_requests",
+        )
+    expected_journeys = []
+    for journey_id, definition in journey_definitions.items():
+        directions = definition["directions"]
+        assert isinstance(directions, dict)
+        if set(directions) != {"outbound", "return"}:
+            raise InputError(
+                "INVALID_PLAN",
+                "每個 Journey 必須同時包含 outbound 與 return",
+                "$.samples",
+            )
+        expected_directions = []
+        for direction in ("outbound", "return"):
+            labels = directions[direction]
+            assert isinstance(labels, list)
+            expected_directions.append(
+                {
+                    "direction": direction,
+                    "point_labels": labels,
+                    "point_count": len(labels),
+                    "intermediate_count": len(labels) - 2,
+                    "leg_count": len(labels) - 1,
+                }
+            )
+        expected_journeys.append(
+            {
+                "journey_id": journey_id,
+                "journey_label": definition["label"],
+                "directions": expected_directions,
+            }
+        )
+    if preview["journeys"] != expected_journeys:
+        raise InputError(
+            "INVALID_PLAN", "journeys preview 與 samples 不一致", "$.preview.journeys"
+        )
+
+
+def _validate_v2_schedule(
+    value: object,
+    *,
+    sample_dates: set[str],
+    mode_counts: Mapping[str, int],
+    samples: list[object],
+    journey_ids: set[str],
+) -> None:
+    schedule = _require_object(value, "$.schedule")
+    allowed = {
+        "start_date",
+        "end_date",
+        "weeks",
+        "weekdays",
+        "dates",
+        "utc_offset",
+        "outbound_departure_time",
+        "return_departure_time",
+        "travel_modes",
+    }
+    _reject_unknown(schedule, allowed, "$.schedule")
+    _require_fields(schedule, allowed, "$.schedule", "INVALID_PLAN")
+    weeks = _bounded_int(schedule["weeks"], "$.schedule.weeks", 1, 4)
+    weekdays = _weekdays_at_path(schedule["weekdays"], "$.schedule.weekdays")
+    offset = _parse_utc_offset(schedule["utc_offset"], "$.schedule.utc_offset")
+    outbound_time = _local_time(
+        schedule["outbound_departure_time"],
+        "$.schedule.outbound_departure_time",
+    )
+    return_time = _local_time(
+        schedule["return_departure_time"], "$.schedule.return_departure_time"
+    )
+    modes = _travel_modes(schedule["travel_modes"], "$.schedule.travel_modes")
+    actual_modes = {mode for mode, count in mode_counts.items() if count}
+    if set(modes) != actual_modes:
+        raise InputError(
+            "INVALID_PLAN",
+            "travel_modes 與 samples 不一致",
+            "$.schedule.travel_modes",
+        )
+    dates_value = schedule["dates"]
+    if (
+        not isinstance(dates_value, list)
+        or any(not isinstance(item, str) for item in dates_value)
+        or dates_value != sorted(sample_dates)
+    ):
+        raise InputError("INVALID_PLAN", "dates 與 samples 不一致", "$.schedule.dates")
+    try:
+        schedule_start = date.fromisoformat(
+            _nonempty_string(schedule["start_date"], "$.schedule.start_date")
+        )
+        schedule_end = date.fromisoformat(
+            _nonempty_string(schedule["end_date"], "$.schedule.end_date")
+        )
+    except ValueError as exc:
+        raise InputError(
+            "INVALID_PLAN", "start_date 與 end_date 必須是 YYYY-MM-DD", "$.schedule"
+        ) from exc
+    if schedule_end != schedule_start + timedelta(days=weeks * 7 - 1):
+        raise InputError(
+            "INVALID_PLAN", "end_date 與 weeks 不一致", "$.schedule.end_date"
+        )
+    if any(
+        not schedule_start <= date.fromisoformat(item) <= schedule_end
+        for item in dates_value
+    ):
+        raise InputError("INVALID_PLAN", "dates 超出 schedule 範圍", "$.schedule.dates")
+    parsed_dates = {date.fromisoformat(item) for item in dates_value}
+    if any(item.isoweekday() not in weekdays for item in parsed_dates):
+        raise InputError(
+            "INVALID_PLAN", "dates 與 weekdays 不一致", "$.schedule.dates"
+        )
+
+    actual_combinations: set[tuple[str, str, str, str]] = set()
+    expected_offset = offset.utcoffset(None)
+    for index, sample_value in enumerate(samples):
+        sample = _require_object(sample_value, f"$.samples[{index}]")
+        direction = str(sample["direction"])
+        departure = datetime.fromisoformat(str(sample["departure_time"]))
+        expected_time = outbound_time if direction == "outbound" else return_time
+        if departure.utcoffset() != expected_offset or departure.time().replace(
+            tzinfo=None
+        ) != expected_time:
+            raise InputError(
+                "INVALID_PLAN",
+                "departure_time 與 schedule 不一致",
+                f"$.samples[{index}].departure_time",
+            )
+        combination = (
+            str(sample["date"]),
+            str(sample["journey_id"]),
+            direction,
+            str(sample["travel_mode"]),
+        )
+        if combination in actual_combinations:
+            raise InputError(
+                "INVALID_PLAN",
+                "Journey/date/direction/mode 組合不得重複",
+                f"$.samples[{index}]",
+            )
+        actual_combinations.add(combination)
+    expected_combinations = {
+        (sample_date, journey_id, direction, mode)
+        for sample_date in dates_value
+        for journey_id in journey_ids
+        for direction in ("outbound", "return")
+        for mode in modes
+    }
+    if actual_combinations != expected_combinations:
+        raise InputError(
+            "INVALID_PLAN",
+            "samples 未完整涵蓋 schedule 與 Journeys",
+            "$.samples",
+        )
+
+
+def _validate_execution_plan_v1(value: object, *, now: datetime) -> dict[str, object]:
     plan = _require_object(value, "$")
     _reject_unknown(
         plan,
@@ -551,6 +1518,18 @@ def validate_execution_plan(value: object, *, now: datetime) -> dict[str, object
 
 def _validate_config(value: object) -> dict[str, object]:
     config = _require_object(value, "$config")
+    if config.get("schema_version") == "1":
+        return _validate_v1_config(config)
+    if config.get("schema_version") == "2":
+        return _validate_v2_config(config)
+    raise InputError(
+        "INVALID_CONFIG",
+        "schema_version 必須是 1 或 2",
+        "$config.schema_version",
+    )
+
+
+def _validate_v1_config(config: Mapping[str, object]) -> dict[str, object]:
     _reject_unknown(
         config,
         {
@@ -858,7 +1837,10 @@ def capabilities() -> dict[str, object]:
         "skill_name": "commute-analyzer",
         "skill_version": SKILL_VERSION,
         "cli_contract_version": CLI_CONTRACT_VERSION,
-        "schema_versions": ["1"],
+        "config_schema_versions": ["1", "2"],
+        "plan_request_schema_versions": ["1", "2"],
+        "plan_schema_versions": ["2"],
+        "result_schema_versions": ["2"],
         "commands": [
             "capabilities",
             "config path",
@@ -869,9 +1851,12 @@ def capabilities() -> dict[str, object]:
         "required_google_routes": {
             "skill_major": 2,
             "cli_contract_version": "2.0.0",
-            "schema_version": "1",
-            "travel_modes": ["DRIVE", "TWO_WHEELER"],
-            "output_profile": "summary",
+            "schema_version": "2",
+            "output_profile": "itinerary_summary",
+            "minimum_points": 2,
+            "maximum_points": 12,
+            "maximum_intermediate_waypoints": 10,
+            "waypoint_order": "fixed",
         },
         "default_weeks": 1,
         "default_weekdays": [1, 2, 3, 4, 5],
@@ -946,7 +1931,12 @@ def run_cli(
             return _write_input_error(error, stdout, stderr)
         metadata = _config_metadata(resolution)
         metadata["content_schema_version"] = config["schema_version"]
-        _write_json(stdout, {"schema_version": "1", "config": metadata})
+        metadata["schema_migration"] = {
+            "target_schema_version": "2",
+            "recommended": config["schema_version"] == "1",
+            "automatic": False,
+        }
+        _write_json(stdout, {"schema_version": "2", "config": metadata})
         _print_config_warnings(resolution, stderr)
         print("私人通勤設定有效。", file=stderr)
         return 0
