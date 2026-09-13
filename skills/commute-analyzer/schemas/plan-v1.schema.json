@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Command1264/agent-skills/skills/commute-analyzer/schemas/plan-v1.schema.json",
+  "title": "Commute Analyzer immutable plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "plan_contract_version", "created_at", "dependency", "schedule", "preview", "samples", "plan_id"],
+  "properties": {
+    "schema_version": {"const": "1"},
+    "plan_contract_version": {"const": "1.0.0"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "plan_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "skill_version", "cli_contract_version", "schema_version", "travel_modes", "output_profile"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "skill_version": {"type": "string", "pattern": "^1\\."},
+        "cli_contract_version": {"const": "2.0.0"},
+        "schema_version": {"const": "1"},
+        "travel_modes": {"type": "array", "const": ["DRIVE", "TWO_WHEELER"]},
+        "output_profile": {"const": "summary"}
+      }
+    },
+    "schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_date", "end_date", "weeks", "weekdays", "dates", "utc_offset", "morning_departure_time", "evening_departure_time", "travel_modes"],
+      "properties": {
+        "start_date": {"type": "string", "format": "date"},
+        "end_date": {"type": "string", "format": "date"},
+        "weeks": {"type": "integer", "minimum": 1, "maximum": 4},
+        "weekdays": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "integer", "minimum": 1, "maximum": 7}},
+        "dates": {"type": "array", "minItems": 1, "items": {"type": "string", "format": "date"}},
+        "utc_offset": {"type": "string"},
+        "morning_departure_time": {"type": "string"},
+        "evening_departure_time": {"type": "string"},
+        "travel_modes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["DRIVE", "TWO_WHEELER"]}}
+      }
+    },
+    "preview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["company_count", "request_count", "retry_limit", "maximum_http_requests", "rate_limit_qpm", "local_rate_limit_only", "confirmation_threshold", "confirmation_required", "estimated_sku_requests"],
+      "properties": {
+        "company_count": {"type": "integer", "minimum": 1},
+        "request_count": {"type": "integer", "minimum": 1},
+        "retry_limit": {"const": 2},
+        "maximum_http_requests": {"type": "integer", "minimum": 3},
+        "rate_limit_qpm": {"type": "integer", "minimum": 1, "maximum": 3000},
+        "local_rate_limit_only": {"const": true},
+        "confirmation_threshold": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "confirmation_required": {"type": "boolean"},
+        "estimated_sku_requests": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["routes_compute_pro", "routes_compute_enterprise"],
+          "properties": {
+            "routes_compute_pro": {"type": "integer", "minimum": 0},
+            "routes_compute_enterprise": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    },
+    "samples": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["request_id", "company_id", "company_name", "date", "direction", "origin_label", "destination_label", "origin", "destination", "travel_mode", "departure_time"],
+        "properties": {
+          "request_id": {"type": "string", "minLength": 1},
+          "company_id": {"type": "string", "minLength": 1},
+          "company_name": {"type": "string", "minLength": 1},
+          "date": {"type": "string", "format": "date"},
+          "direction": {"enum": ["outbound", "return"]},
+          "origin_label": {"type": "string", "minLength": 1},
+          "destination_label": {"type": "string", "minLength": 1},
+          "origin": {"$ref": "config-v1.schema.json#/$defs/location"},
+          "destination": {"$ref": "config-v1.schema.json#/$defs/location"},
+          "travel_mode": {"enum": ["DRIVE", "TWO_WHEELER"]},
+          "departure_time": {"type": "string", "format": "date-time"}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "schema_version": "1",
+  "weeks": 1,
+  "weekdays": [1],
+  "travel_modes": ["TWO_WHEELER", "DRIVE"],
+  "rate_limit_qpm": 60
+}

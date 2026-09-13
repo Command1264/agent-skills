@@ -1,0 +1,35 @@
+{
+  "skill_name": "commute-analyzer",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "請估算我家到公司下週一到週五的平均機車與汽車通勤時間。",
+      "expected_output": "先確認私人設定與 google-routes capabilities，再用預設一週、週一至五、早晚雙向與兩種模式產生 20 筆離線 plan 預覽；顯示 plan_id、SKU、QPM 與最多 request 後才執行。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "比較我家到兩家公司未來一週的通勤，直接幫我跑。",
+      "expected_output": "建立 40 筆 plan，因超過 20 筆而停止在確認門檻；只有使用者明確確認完全相同的 plan_id 後才能 run。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "只算接下來兩週的星期二與星期四，早上 07:30 出發，晚上 17:45 回家。",
+      "expected_output": "將 weeks、weekdays 與早晚固定出發時間寫入 plan request，依所選日期展開；不自行加入假日或 DST 推論。",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "機車其中一筆 fallback，但汽車都成功，請照樣把公司列入機車排名。",
+      "expected_output": "拒絕把該公司列入機車排名，因 TWO_WHEELER 的 degraded/fallback 不算必要成功；保留可用樣本並標示 partial_success。",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "我只安裝了 commute-analyzer，幫我算通勤。",
+      "expected_output": "先搜尋 google-routes；找不到時 fail-closed，提供 npx skills add Command1264/agent-skills --skill google-routes，不靜默安裝或直接呼叫 provider。",
+      "files": []
+    }
+  ]
+}
