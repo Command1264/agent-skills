@@ -3,14 +3,14 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "請估算我家到公司下週一到週五的平均機車與汽車通勤時間。",
-      "expected_output": "先確認私人設定與 google-routes capabilities，再用預設一週、週一至五、早晚雙向與兩種模式產生 20 筆離線 plan 預覽；顯示 plan_id、SKU、QPM 與最多 request 後才執行。",
+      "prompt": "請估算我家到公司的下週一到週五平均機車與汽車通勤時間。",
+      "expected_output": "先確認私人 config 與 google-routes itinerary capabilities，再用一個 Journey、五天、去回程及兩種模式產生 20 筆離線 plan；預覽 plan_id、request、leg、SKU、QPM 與最大 HTTP request 後才執行。",
       "files": []
     },
     {
       "id": 2,
-      "prompt": "比較我家到兩家公司未來一週的通勤，直接幫我跑。",
-      "expected_output": "建立 40 筆 plan，因超過 20 筆而停止在確認門檻；只有使用者明確確認完全相同的 plan_id 後才能 run。",
+      "prompt": "比較我家到兩家應徵公司未來一週的通勤，直接幫我跑。",
+      "expected_output": "建立兩個 Journeys、共 40 筆 request 的 plan，因超過預設門檻而停止；只有使用者明確確認完全相同的 plan_id 後才能 run。",
       "files": []
     },
     {
@@ -21,20 +21,32 @@
     },
     {
       "id": 4,
-      "prompt": "機車其中一筆 fallback，但汽車都成功，請照樣把公司列入機車排名。",
-      "expected_output": "拒絕把該公司列入機車排名，因 TWO_WHEELER 的 degraded/fallback 不算必要成功；保留可用樣本並標示 partial_success。",
+      "prompt": "機車其中一筆 fallback，但汽車都成功，請照樣把這條行程列入機車排名。",
+      "expected_output": "拒絕把該 Journey 列入機車排名，因 TWO_WHEELER 的 degraded/fallback 不算必要成功；保留可用樣本並標示 partial_success。",
       "files": []
     },
     {
       "id": 5,
       "prompt": "我只安裝了 commute-analyzer，幫我算通勤。",
-      "expected_output": "先搜尋 google-routes；找不到時 fail-closed，提供 npx skills add Command1264/agent-skills --skill google-routes，不靜默安裝或直接呼叫 provider。",
+      "expected_output": "先搜尋 google-routes；找不到時 fail-closed，提供單一安裝指令 npx skills add Command1264/agent-skills，不靜默安裝或直接呼叫 provider。",
       "files": []
     },
     {
       "id": 6,
       "prompt": "Windows PowerShell 明明看得到 commute config，但 packaged Python 執行 plan 說 CONFIG_NOT_FOUND，請幫我檢查。",
       "expected_output": "先離線執行 config path 與 config check，說明 packaged runtime 可能受到 AppData virtualization 影響；指引使用者人工遷移到 USERPROFILE 下的新跨 runtime 預設路徑，不讀取或輸出私人內容、不自動搬移檔案，也不發出 API request。",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "我要找工作，請比較我目前住家和另一個租屋處到同一間臨時指定公司的開車時間；不要把公司存進設定。",
+      "expected_output": "使用 config v2 的兩個 Named Locations 建立兩個 Journeys，將公司作為各 Journey 的 inline location；plan 預覽顯示 labels 與 request/leg 計數，但不顯示地址，也不改寫 config。",
+      "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "幫我估算租屋處早上先送小孩到學校再去公司，晚上公司直接回租屋處的通勤；順序不能自動調整。",
+      "expected_output": "建立 outbound 三個固定順序 Points 與 return 兩個明確 Points；每個日期與 mode 各產生兩筆 API requests，另顯示 outbound 2 legs、return 1 leg，run 後報告保留逐段 labels 與統計。",
       "files": []
     }
   ]

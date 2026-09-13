@@ -1,0 +1,136 @@
+{
+  "schema_version": "2",
+  "analysis_contract_version": "2.0.0",
+  "plan_id": "sha256:afd0a66ac225cece00efa3eac1f1bfa34a7a20ed2f95fab860b90337a211fe05",
+  "generated_at": "2099-01-05T12:00:00+00:00",
+  "status": "success",
+  "dependency_path": "/opt/skills/google-routes",
+  "request_summary": {
+    "planned": 4,
+    "actual_http_requests": 4,
+    "retries": 0,
+    "success": 4,
+    "degraded": 0,
+    "failed": 0
+  },
+  "journeys": [
+    {
+      "journey_id": "home-to-candidate",
+      "journey_label": "住家到應徵公司",
+      "ranking_eligible": true,
+      "ranking_exclusion_reasons": [],
+      "modes": {
+        "TWO_WHEELER": {
+          "required_sample_count": 2,
+          "successful_sample_count": 2,
+          "complete": true,
+          "statistics": {
+            "outbound": {"average_seconds": 600, "median_seconds": 600, "minimum_seconds": 600, "maximum_seconds": 600},
+            "return": {"average_seconds": 650, "median_seconds": 650, "minimum_seconds": 650, "maximum_seconds": 650},
+            "daily_round_trip": {"average_seconds": 1250, "median_seconds": 1250, "minimum_seconds": 1250, "maximum_seconds": 1250}
+          },
+          "weekly_total_seconds": 1250,
+          "four_week_month_estimate_seconds": 5000,
+          "samples": [
+            {
+              "request_id": "home-to-candidate.20990105.outbound.two-wheeler",
+              "date": "2099-01-05",
+              "direction": "outbound",
+              "travel_mode": "TWO_WHEELER",
+              "status": "success",
+              "attempts": 1,
+              "distance_meters": 6000,
+              "duration_seconds": 600,
+              "static_duration_seconds": 540,
+              "legs": [
+                {"from_label": "示例住家", "to_label": "示例應徵公司", "distance_meters": 6000, "duration_seconds": 600, "static_duration_seconds": 540}
+              ],
+              "warnings": [],
+              "fallback": null
+            },
+            {
+              "request_id": "home-to-candidate.20990105.return.two-wheeler",
+              "date": "2099-01-05",
+              "direction": "return",
+              "travel_mode": "TWO_WHEELER",
+              "status": "success",
+              "attempts": 1,
+              "distance_meters": 6000,
+              "duration_seconds": 650,
+              "static_duration_seconds": 580,
+              "legs": [
+                {"from_label": "示例應徵公司", "to_label": "示例住家", "distance_meters": 6000, "duration_seconds": 650, "static_duration_seconds": 580}
+              ],
+              "warnings": [],
+              "fallback": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "journey_id": "rental-via-school",
+      "journey_label": "租屋處經學校到應徵公司",
+      "ranking_eligible": true,
+      "ranking_exclusion_reasons": [],
+      "modes": {
+        "TWO_WHEELER": {
+          "required_sample_count": 2,
+          "successful_sample_count": 2,
+          "complete": true,
+          "statistics": {
+            "outbound": {"average_seconds": 1200, "median_seconds": 1200, "minimum_seconds": 1200, "maximum_seconds": 1200},
+            "return": {"average_seconds": 900, "median_seconds": 900, "minimum_seconds": 900, "maximum_seconds": 900},
+            "daily_round_trip": {"average_seconds": 2100, "median_seconds": 2100, "minimum_seconds": 2100, "maximum_seconds": 2100}
+          },
+          "weekly_total_seconds": 2100,
+          "four_week_month_estimate_seconds": 8400,
+          "samples": [
+            {
+              "request_id": "rental-via-school.20990105.outbound.two-wheeler",
+              "date": "2099-01-05",
+              "direction": "outbound",
+              "travel_mode": "TWO_WHEELER",
+              "status": "success",
+              "attempts": 1,
+              "distance_meters": 12000,
+              "duration_seconds": 1200,
+              "static_duration_seconds": 1050,
+              "legs": [
+                {"from_label": "示例租屋處", "to_label": "示例學校", "distance_meters": 4000, "duration_seconds": 450, "static_duration_seconds": 400},
+                {"from_label": "示例學校", "to_label": "示例應徵公司", "distance_meters": 8000, "duration_seconds": 750, "static_duration_seconds": 650}
+              ],
+              "warnings": [],
+              "fallback": null
+            },
+            {
+              "request_id": "rental-via-school.20990105.return.two-wheeler",
+              "date": "2099-01-05",
+              "direction": "return",
+              "travel_mode": "TWO_WHEELER",
+              "status": "success",
+              "attempts": 1,
+              "distance_meters": 9000,
+              "duration_seconds": 900,
+              "static_duration_seconds": 800,
+              "legs": [
+                {"from_label": "示例應徵公司", "to_label": "示例租屋處", "distance_meters": 9000, "duration_seconds": 900, "static_duration_seconds": 800}
+              ],
+              "warnings": [],
+              "fallback": null
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "ranking": [
+    {"rank": 1, "journey_id": "home-to-candidate", "journey_label": "住家到應徵公司", "daily_round_trip_average_seconds": 1250},
+    {"rank": 2, "journey_id": "rental-via-school", "journey_label": "租屋處經學校到應徵公司", "daily_round_trip_average_seconds": 2100}
+  ],
+  "outputs": {
+    "json_report": "/private/reports/2099-01-05-example.json",
+    "markdown_report": "/private/reports/2099-01-05-example.md",
+    "usage_ledger": "/private/usage.jsonl"
+  }
+}

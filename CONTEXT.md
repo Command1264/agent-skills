@@ -9,7 +9,7 @@
 _避免使用_：平均通勤 Skill、公司通勤 Skill
 
 **`commute-analyzer`（平均通勤 Skill）**：
-組合 `google-routes`，依指定日期範圍、星期與早晚出發時間建立多筆預測樣本，再計算住家與公司之間的通勤統計。第一版支援單一公司分析與多公司批次比較。它可以獨立透過 `npx skills add` 安裝，但執行前必須確認 `google-routes` 已安裝；找不到時拒絕執行並提供安裝指引。
+組合 `google-routes`，依指定日期、星期與去回程時間，為任意起終點及固定順序多站 Commute Journeys 建立預測樣本，再計算方向、每日來回、每週與四週通勤統計。它可獨立安裝，但執行前必須確認相容的 `google-routes` 已安裝；找不到時拒絕執行並提供單一 repository 安裝指引。
 _避免使用_：Route API Skill、歷史通勤 Skill
 
 **執行期 Skill 相依性（Runtime Skill Dependency）**：
@@ -41,8 +41,32 @@ _避免使用_：歷史樣本、實際通勤紀錄
 _避免使用_：真實平均交通時間、過去四週平均
 
 **通勤設定檔（Commute Profile）**：
-保存在本機的私人設定，包含住家位置、預設工作日、出發時間、時區與交通模式。通勤設定檔不得提交至公開 repository。
+保存在本機的私人設定，包含可重用的命名地點、出發時間與時區；舊版也可以住家與公司表示相同用途。通勤設定檔不得提交至公開 repository。
 _避免使用_：公開預設值、Skill 內建住家地址
+
+**命名地點（Named Location）**：
+通勤設定檔中可重用的私人地點，具有穩定 id、非地址 label，以及恰好一種 address 或 place ID；它不預設代表住家、公司或其他角色。
+_避免使用_：公司地點、住家欄位、公開地點
+
+**命名地點目錄（Named Location Catalog）**：
+同一份通勤設定檔所擁有的 Named Locations 集合，以唯一 id 供不同 Commute Journeys 引用。
+_避免使用_：公司清單、地址簿、公開地點資料庫
+
+**臨時地點（Inline Location）**：
+只在一次私人 plan request 與其 Execution Plan 中存在的 Named Route Point，不會自動加入 Named Location Catalog 或改寫設定。
+_避免使用_：自動保存地點、暫存公司設定、公開地址
+
+**通勤行程（Commute Journey）**：
+通勤分析與排序的單位，由穩定 id、顯示 label，以及各自有序的去程與回程 Points 組成；起訖點不帶住家或公司角色限制。
+_避免使用_：公司分析、單一路線、導航行程
+
+**行程方向（Journey Direction）**：
+Commute Journey 的 outbound 或 return 半程，各自具有 2–12 個固定順序 Points；return 不必與 outbound 經過相同地點。
+_避免使用_：早上路線、晚上路線、自動反向路線
+
+**行程排序（Journey Ranking）**：
+多個 Commute Journeys 依完整機車必要樣本的每日來回平均預測時間由短至長排列；未要求機車或必要樣本不完整的行程不參與排序。
+_避免使用_：公司排序、通勤評分、職缺排名
 
 **一週預測取樣（One-week Predictive Sampling）**：
 從 `start_date` 起選取 `weeks` 範圍內指定的 `weekdays`，針對每天的早晚出發時間建立預測通勤樣本。`start_date` 預設為下一個星期一、`weeks` 預設為一週、`weekdays` 預設為週一至週五；第一版不自動排除國定假日，所有選定日期共用一組早晚出發時間。
@@ -57,11 +81,11 @@ _避免使用_：日曆月實際通勤時間、歷史月平均
 _避免使用_：上班時間模式、抵達時間模式
 
 **目標抵達時間模式（Target Arrival Mode）**：
-以期望抵達公司的時間為目標，反推建議離家時間。第一版保留此操作入口，但在反推流程完成前必須明確標示為尚未支援。
+以期望抵達終點的時間為目標，反推建議起點出發時間。v2 保留此操作入口，但在反推流程完成前必須明確標示為尚未支援。
 _避免使用_：固定出發時間模式
 
 **請求預覽（Request Preview）**：
-在呼叫 Routes API 前，列出交通模式、目的地數量、取樣日期、正常請求數、重試上限與本機節流設定。正常請求不超過預設門檻二十筆時可以在顯示預覽後執行；超過門檻必須取得使用者明確確認。門檻可由參數調整，但不得關閉預覽。
+在呼叫 Routes API 前，列出 Journeys、方向 Point labels、交通模式、取樣日期、正常 request 數、route leg 數、重試上限與本機節流設定。正常 request 不超過預設門檻二十筆時可以在顯示預覽後執行；超過門檻必須取得使用者對同一 plan ID 的明確確認。門檻可由參數調整，但不得關閉預覽。
 _避免使用_：API 使用紀錄、執行結果
 
 **執行計畫（Execution Plan）**：
@@ -73,7 +97,7 @@ _避免使用_：執行結果、可變暫存、API request log
 _避免使用_：隱含確認、重新產生計畫、直接呼叫 API
 
 **必要樣本集合（Required Sample Set）**：
-一家公司參與正式排名所需的全部機車樣本，包含每個選定日期的住家到公司早上路線，以及公司到住家晚上路線。任何必要樣本在有限重試後仍失敗時，該公司標示為資料不完整並排除排名，但保留成功樣本與錯誤資訊。
+一個 Commute Journey 參與正式排名所需的全部機車樣本，包含每個選定日期的 outbound 與 return。任何必要樣本為 degraded 或在有限重試後仍失敗時，該 Journey 標示為資料不完整並排除排名，但保留成功樣本與去識別錯誤資訊。
 _避免使用_：最低成功樣本、部分平均、靜默排除失敗
 
 **主動請求節流（Proactive Request Throttling）**：
@@ -81,7 +105,7 @@ _避免使用_：最低成功樣本、部分平均、靜默排除失敗
 _避免使用_：遇到 429 才降速、無上限平行請求、保證永不發生 429
 
 **路線查詢結果（Route Query Result）**：
-路線查詢 Skill 對單次預測結果提供的穩定結構化資料。預設 `summary` profile 只包含 request ID、狀態、距離、含交通時間、靜態時間、警告、fallback 與地址對應的 Place ID；不包含 polyline、導航步驟、viewport、route token 或完整 Google response。平均通勤 Skill 只依賴此契約，不直接依賴 Google 的原始回應格式。未來有實際用途時可新增具名 output profile，不改變既有 `summary` 契約。
+路線查詢 Skill 對單次預測結果提供的穩定結構化資料。`summary` 提供直接起終點摘要；`itinerary_summary` 另提供固定順序 Point labels 與 Route Legs。兩者都不包含完整位置、polyline、導航步驟、viewport、route token 或完整 Google response。平均通勤 Skill 只依賴 `itinerary_summary`，不直接依賴 Google 原始格式。
 _避免使用_：Google 原始 response、通勤摘要
 
 **命名路線點（Named Route Point）**：
@@ -108,7 +132,7 @@ Google 回傳 `fallbackInfo`，表示未完全按照要求的條件計算路線�
 _避免使用_：成功樣本、完全失敗、忽略 fallback
 
 **地址標籤（Location Label）**：
-用於預覽、結果與一般 log 的非敏感名稱，例如 `home` 或公司名稱。預設不得重複輸出完整地址；只有使用者明確指定 `--include-locations` 時，結果才可包含位置內容。
+用於預覽、結果與一般 log 的非敏感名稱，例如 `home`、`school` 或公司顯示名稱。label 不應填入完整地址；plan 以外的一般輸出、報告、ledger 與檔名不包含位置內容。
 _避免使用_：完整地址、Place ID、座標
 
 **API 使用帳本（API Usage Ledger）**：
@@ -116,7 +140,7 @@ _避免使用_：完整地址、Place ID、座標
 _避免使用_：路線快取、通勤歷史、原始 response log
 
 **通勤報告（Commute Report）**：
-由相同分析結果產生的版本化 JSON 與繁體中文 Markdown。預設寫入私人資料目錄的 `reports` 子目錄，檔名只包含執行日期與不含地址的 report ID；`--output-dir` 可明確覆寫位置。機車必要樣本完整的公司可參與機車排名；只有汽車樣本不完整時，不影響機車排名，但汽車欄位必須標示不完整。
+由相同分析結果產生的版本化 JSON 與繁體中文 Markdown。預設寫入私人資料目錄的 `reports` 子目錄，檔名只包含執行日期與 plan-ID-derived report ID；`--output-dir` 可明確覆寫位置。報告包含 Journey／Point labels、Route Legs 與統計，不包含位置或 provider point Place ID。機車必要樣本完整的 Journey 可參與排名；只有汽車樣本不完整時，不影響機車排名，但汽車欄位必須標示不完整。
 _避免使用_：repository 報告、歷史實測、完整地址檔名
 
 **私人通勤設定（Private Commute Configuration）**：
@@ -128,7 +152,7 @@ _避免使用_：repository 設定、公開範例設定
 _避免使用_：單一 runtime 路徑驗證、自動 secret 遷移、相同字串即相同檔案
 
 **公司設定（Company Configuration）**：
-私人通勤設定中的可重用目的地，包含穩定 `id`、顯示名稱，以及恰好一種 `address` 或 `place_id`。CLI 也可加入只用於當次計畫的公司，不自動寫回私人設定；未來的公司別早晚時間覆寫不是第一版行為。
+第一版私人通勤設定中的可重用目的地，包含穩定 `id`、顯示名稱，以及恰好一種 `address` 或 `place_id`；v2 以不帶角色限制的 Named Location 與 Commute Journey 取代。CLI 加入的臨時公司不會自動寫回私人設定。
 _避免使用_：公開公司清單、自動保存臨時輸入、多個位置來源
 
 **Place ID 建議更新（Suggested Place ID Update）**：
@@ -144,5 +168,5 @@ _避免使用_：IANA 時區、完整 DST 支援、本機隱含時區
 _避免使用_：成功、整批失敗、忽略錯誤
 
 **通勤排序（Commute Ranking）**：
-多公司比較時，依機車每日來回平均時間由短至長排列的結果。第一版不使用不透明的綜合分數。
+第一版多公司比較時，依機車每日來回平均時間由短至長排列的結果；v2 的對應概念是 Journey Ranking。第一版不使用不透明的綜合分數。
 _避免使用_：通勤評分、職缺排名

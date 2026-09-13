@@ -5,14 +5,16 @@
 
 ## 目前狀態
 
-Repository foundation、`google-routes` v2 與 `commute-analyzer` v1 穩定版已發布。
+Repository foundation、`google-routes` v2 與 `commute-analyzer` v2 穩定版已發布。
+已確認但尚未進入實作的 maintainability 與 internationalization 工作記錄於
+[`TODO.md`](TODO.md)。
 
 規劃中的第一批 Skills：
 
 | Skill | 用途 | 狀態 |
 | --- | --- | --- |
 | `google-routes` | 封裝 Google Routes API，輸出穩定 JSON | v2.1.0 |
-| `commute-analyzer` | 以未來工作日樣本估算並比較住家與公司的通勤時間 | v1.1.0 |
+| `commute-analyzer` | 以任意起終點與多站 Journey 估算並比較未來通勤時間 | v2.0.0 |
 
 ## 安裝
 
@@ -69,26 +71,28 @@ JSON，並只在本機填入真實地址。例如：
 
 ```json
 {
-  "schema_version": "1",
-  "home": {
-    "label": "住家",
-    "location": { "address": "請在本機填入住家地址" }
-  },
-  "companies": [
+  "schema_version": "2",
+  "locations": [
     {
-      "id": "baseline-company",
-      "name": "基準公司",
-      "location": { "address": "請在本機填入公司地址" }
+      "id": "home",
+      "label": "住家",
+      "location": { "address": "請在本機填入住家地址" }
+    },
+    {
+      "id": "rental",
+      "label": "租屋處",
+      "location": { "address": "請在本機填入租屋處地址" }
     }
   ],
   "utc_offset": "+08:00",
-  "morning_departure_time": "08:00",
-  "evening_departure_time": "18:00"
+  "outbound_departure_time": "08:00",
+  "return_departure_time": "18:00"
 }
 ```
 
-設定檔目前至少需要一家公司。請勿在其中加入 API key，也不要將設定檔 commit、貼到公開 Issue／PR
-或放進同步資料夾。建立後執行完全離線的檢查：
+`locations` 可以保存住家、租屋處、住宿、公司、學校或其他用途，也可以是空 array，讓 request 全部
+使用臨時位置。請勿加入 API key，也不要將設定檔 commit、貼到公開 Issue／PR 或放進同步資料夾。
+建立後執行完全離線的檢查：
 
 ```powershell
 python "$HOME\.agents\skills\commute-analyzer\scripts\commute_analyzer.py" config check
@@ -99,21 +103,30 @@ python "$HOME\.agents\skills\commute-analyzer\scripts\commute_analyzer.py" confi
 
 ### 3. 臨時評估應徵公司
 
-應徵公司的地址會頻繁改變時，不必每次修改 config。請在本次 plan request 的
-`additional_companies` 加入一至多家公司；它們只會附加到這次分析，不會寫回 config：
+應徵公司的地址會頻繁改變時，不必修改 config。請在本次 plan request 建立 Journey，起點可引用
+已保存的 `location_id`，公司則使用 inline label/location；inline location 不會寫回 config：
 
 ```json
 {
-  "schema_version": "1",
+  "schema_version": "2",
   "weeks": 1,
   "weekdays": [1, 2, 3, 4, 5],
   "travel_modes": ["DRIVE"],
   "rate_limit_qpm": 60,
-  "additional_companies": [
+  "journeys": [
     {
-      "id": "candidate-company",
-      "name": "本次應徵公司",
-      "location": { "address": "請只在私人 plan 填入公司地址" }
+      "id": "home-to-candidate",
+      "label": "住家到本次應徵公司",
+      "outbound": {
+        "points": [
+          { "location_id": "home" },
+          {
+            "label": "本次應徵公司",
+            "location": { "address": "請只在私人 request 填入公司地址" }
+          }
+        ]
+      },
+      "return": { "reverse_outbound": true }
     }
   ]
 }
@@ -128,11 +141,10 @@ Get-Content .\plan-request.json | python "$HOME\.agents\skills\commute-analyzer\
 此時尚未呼叫 API。檢查 plan 中的 request 數、最多 HTTP request 數、SKU、QPM 與 `plan_id`，
 確認 Google Cloud quota 後，才依 Skill 提示決定是否執行 `run`。
 
-目前 plan 的起點仍固定取自 config 的 `home`。若要在住家與租屋處之間切換，可各自保存一份私人
-config，並以 `plan --config <路徑>` 選擇；目前不能在 plan request 內臨時覆寫起點。
-`commute-analyzer` v1 目前仍不支援中途停靠點；`google-routes` v2.1.0 已能查詢最多 10 個
-固定順序停靠點。只需臨時查詢任意起點、終點或多站路線，不需要通勤平均時，可直接要求 Agent
-使用 `google-routes`。命名地點與多站通勤分析將由 `commute-analyzer` v2 提供。
+每個 Journey 的 outbound 與 return 都能使用任意起點、終點及最多 10 個固定順序停靠點；return
+也可明確指定與 outbound 不同的 Points。要比較住家與租屋處到同一家公司，建立兩個 Journeys 並在
+各自 Points 引用不同 `location_id` 即可。只需單次路線、不需要未來工作日統計時，直接使用
+`google-routes`。
 
 詳細欄位、確認門檻、輸出與錯誤處理見
 [`commute-analyzer` CLI contract](skills/commute-analyzer/references/cli-contract.md)。
