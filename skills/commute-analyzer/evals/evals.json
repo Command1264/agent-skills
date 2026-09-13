@@ -30,6 +30,12 @@
       "prompt": "我只安裝了 commute-analyzer，幫我算通勤。",
       "expected_output": "先搜尋 google-routes；找不到時 fail-closed，提供 npx skills add Command1264/agent-skills --skill google-routes，不靜默安裝或直接呼叫 provider。",
       "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "Windows PowerShell 明明看得到 commute config，但 packaged Python 執行 plan 說 CONFIG_NOT_FOUND，請幫我檢查。",
+      "expected_output": "先離線執行 config path 與 config check，說明 packaged runtime 可能受到 AppData virtualization 影響；指引使用者人工遷移到 USERPROFILE 下的新跨 runtime 預設路徑，不讀取或輸出私人內容、不自動搬移檔案，也不發出 API request。",
+      "files": []
     }
   ]
 }

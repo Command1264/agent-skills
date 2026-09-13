@@ -12,6 +12,19 @@
 - 預設輸出使用非敏感 label；只有使用者明確要求時才顯示完整位置，而且仍不得顯示 secret。
 - 測試與文件使用虛構位置、官方公開範例或不可逆的去識別資料。
 
+## 跨 runtime 私人儲存
+
+- 選定 config、credential、cache、ledger 或其他持久資料路徑前，必須從建立檔案的程序與
+  實際消費它的代表性 runtime 分別驗證讀寫可見性；相同環境變數字串不代表相同實體檔案。
+- Windows 上若資料需要由 packaged 與 unpackaged runtime 共用，預設使用
+  `%USERPROFILE%\.config` 保存設定、`%USERPROFILE%\.local\share` 保存資料，避免使用可能受
+  MSIX AppData virtualization 影響的 `%APPDATA%`／`%LOCALAPPDATA%`。只有具備代表性
+  cross-runtime 證據時才能採用其他路徑。
+- 路徑契約改變時，須提供不讀取私人內容的 path／check 診斷與可操作的人工遷移說明；不得
+  自動複製、搬移或刪除 secret、私人設定與私人產物。
+- 新增或修改 Windows 私人儲存行為時，驗收必須包含 packaged runtime 與一般 runtime；
+  只在 PowerShell、測試替身或單一 Python 安裝成功，不足以證明跨 runtime 可用。
+
 ## 外部 API
 
 - 呼叫前驗證所有輸入、目標 endpoint、預估請求數、成本門檻與 rate limit；不得以收到
