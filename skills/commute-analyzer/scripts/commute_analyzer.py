@@ -2422,7 +2422,9 @@ def _run_google_routes(
 def _read_json(stream: TextIO, label: str) -> object:
     try:
         return json.load(stream)
-    except json.JSONDecodeError as error:
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        if isinstance(error, UnicodeDecodeError):
+            raise InputError("INVALID_JSON", f"{label} 必須是 UTF-8 JSON") from error
         raise InputError(
             "INVALID_JSON",
             f"{label} 不是有效 JSON（第 {error.lineno} 行第 {error.colno} 欄）",
@@ -2480,6 +2482,9 @@ def _write_usage_error(stdout: TextIO, stderr: TextIO) -> int:
 
 
 def main() -> int:
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="strict")
     return run_cli(
         sys.argv[1:],
         stdin=sys.stdin,

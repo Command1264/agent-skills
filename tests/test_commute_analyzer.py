@@ -4,6 +4,9 @@ import copy
 import importlib.util
 import io
 import json
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -18,6 +21,34 @@ SPEC = importlib.util.spec_from_file_location("commute_analyzer", MODULE_PATH)
 assert SPEC is not None and SPEC.loader is not None
 commute_analyzer = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(commute_analyzer)
+
+
+class CliEncodingTests(unittest.TestCase):
+    def test_plan_cli_forces_utf8_when_parent_pipe_encoding_is_cp950(self) -> None:
+        examples = ROOT / "skills" / "commute-analyzer" / "examples"
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(MODULE_PATH),
+                "plan",
+                "--config",
+                str(examples / "config-v2.json"),
+            ],
+            cwd=ROOT,
+            env={**os.environ, "PYTHONIOENCODING": "cp950:surrogateescape"},
+            input=(examples / "plan-request-v2.json").read_bytes(),
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(
+            completed.returncode,
+            0,
+            completed.stderr.decode("utf-8", errors="replace"),
+        )
+        result = json.loads(completed.stdout.decode("utf-8"))
+        self.assertEqual(result["schema_version"], "2")
+        self.assertEqual(result["preview"]["journey_count"], 2)
 
 
 def private_config() -> dict[str, object]:

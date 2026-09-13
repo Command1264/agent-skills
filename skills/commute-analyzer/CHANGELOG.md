@@ -22,6 +22,11 @@
 - 私人 JSON／Markdown 報告與 usage ledger 升級為 v2；報告保留 labels 與 legs，不保存位置或 provider
   point Place ID；Markdown 會轉義自訂 label，避免被解讀為連結、圖片或額外段落。
 
+### Fixed
+
+- 修正 Windows PowerShell 以 UTF-8 native pipe 傳入含中文的 plan request 時，Python 可能依系統
+  code page 解碼並在計算 `plan_id` 時觸發 `UnicodeEncodeError`；CLI 現在明確固定 UTF-8 stdio。
+
 ### Development status
 
 - Issue #20 階段 2A–2C 已完成本機 schema、planning、run、分析、私人產物與 mock E2E；正式
