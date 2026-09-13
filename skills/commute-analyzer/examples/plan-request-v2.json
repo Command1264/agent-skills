@@ -1,0 +1,49 @@
+{
+  "schema_version": "2",
+  "start_date": "2099-01-05",
+  "weeks": 1,
+  "weekdays": [1],
+  "travel_modes": ["TWO_WHEELER"],
+  "rate_limit_qpm": 60,
+  "confirmation_threshold": 20,
+  "schedule_mode": "fixed_departure",
+  "journeys": [
+    {
+      "id": "home-to-candidate",
+      "label": "住家到應徵公司",
+      "outbound": {
+        "points": [
+          {"location_id": "home"},
+          {
+            "label": "示例應徵公司",
+            "location": {"address": "範例市創新路 100 號"}
+          }
+        ]
+      },
+      "return": {"reverse_outbound": true}
+    },
+    {
+      "id": "rental-via-school",
+      "label": "租屋處經學校到應徵公司",
+      "outbound": {
+        "points": [
+          {"location_id": "rental"},
+          {"location_id": "school"},
+          {
+            "label": "示例應徵公司",
+            "location": {"address": "範例市創新路 100 號"}
+          }
+        ]
+      },
+      "return": {
+        "points": [
+          {
+            "label": "示例應徵公司",
+            "location": {"address": "範例市創新路 100 號"}
+          },
+          {"location_id": "rental"}
+        ]
+      }
+    }
+  ]
+}

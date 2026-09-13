@@ -1,0 +1,23 @@
+{
+  "schema_version": "2",
+  "locations": [
+    {
+      "id": "home",
+      "label": "示例住家",
+      "location": {"address": "範例市和平路 1 號"}
+    },
+    {
+      "id": "rental",
+      "label": "示例租屋處",
+      "location": {"address": "範例市自由路 20 號"}
+    },
+    {
+      "id": "school",
+      "label": "示例學校",
+      "location": {"place_id": "ChIJFictionalSchool"}
+    }
+  ],
+  "utc_offset": "+08:00",
+  "outbound_departure_time": "08:00",
+  "return_departure_time": "18:00"
+}

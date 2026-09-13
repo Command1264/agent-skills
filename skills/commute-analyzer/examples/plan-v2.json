@@ -1,0 +1,152 @@
+{
+  "schema_version": "2",
+  "plan_contract_version": "2.0.0",
+  "created_at": "2099-01-01T12:00:00+00:00",
+  "input_compatibility": {
+    "config_schema_version": "2",
+    "plan_request_schema_version": "2",
+    "adapter": null
+  },
+  "dependency": {
+    "path": "/opt/skills/google-routes",
+    "skill_version": "2.1.0",
+    "cli_contract_version": "2.0.0",
+    "schema_version": "2",
+    "travel_modes": ["DRIVE", "TWO_WHEELER"],
+    "output_profile": "itinerary_summary",
+    "itinerary_limits": {
+      "minimum_points": 2,
+      "maximum_points": 12,
+      "maximum_intermediate_waypoints": 10,
+      "waypoint_order": "fixed"
+    }
+  },
+  "schedule": {
+    "start_date": "2099-01-05",
+    "end_date": "2099-01-11",
+    "weeks": 1,
+    "weekdays": [1],
+    "dates": ["2099-01-05"],
+    "utc_offset": "+08:00",
+    "outbound_departure_time": "08:00",
+    "return_departure_time": "18:00",
+    "travel_modes": ["TWO_WHEELER"]
+  },
+  "preview": {
+    "journey_count": 2,
+    "request_count": 4,
+    "planned_leg_count": 5,
+    "retry_limit": 2,
+    "maximum_http_requests": 12,
+    "rate_limit_qpm": 60,
+    "local_rate_limit_only": true,
+    "confirmation_threshold": 20,
+    "confirmation_required": false,
+    "estimated_sku_requests": {
+      "routes_compute_pro": 0,
+      "routes_compute_enterprise": 4
+    },
+    "journeys": [
+      {
+        "journey_id": "home-to-candidate",
+        "journey_label": "住家到應徵公司",
+        "directions": [
+          {
+            "direction": "outbound",
+            "point_labels": ["示例住家", "示例應徵公司"],
+            "point_count": 2,
+            "intermediate_count": 0,
+            "leg_count": 1
+          },
+          {
+            "direction": "return",
+            "point_labels": ["示例應徵公司", "示例住家"],
+            "point_count": 2,
+            "intermediate_count": 0,
+            "leg_count": 1
+          }
+        ]
+      },
+      {
+        "journey_id": "rental-via-school",
+        "journey_label": "租屋處經學校到應徵公司",
+        "directions": [
+          {
+            "direction": "outbound",
+            "point_labels": ["示例租屋處", "示例學校", "示例應徵公司"],
+            "point_count": 3,
+            "intermediate_count": 1,
+            "leg_count": 2
+          },
+          {
+            "direction": "return",
+            "point_labels": ["示例應徵公司", "示例租屋處"],
+            "point_count": 2,
+            "intermediate_count": 0,
+            "leg_count": 1
+          }
+        ]
+      }
+    ]
+  },
+  "samples": [
+    {
+      "request_id": "home-to-candidate.20990105.outbound.two-wheeler",
+      "journey_id": "home-to-candidate",
+      "journey_label": "住家到應徵公司",
+      "date": "2099-01-05",
+      "direction": "outbound",
+      "points": [
+        {"label": "示例住家", "location": {"address": "範例市和平路 1 號"}},
+        {"label": "示例應徵公司", "location": {"address": "範例市創新路 100 號"}}
+      ],
+      "travel_mode": "TWO_WHEELER",
+      "departure_time": "2099-01-05T08:00:00+08:00",
+      "expected_leg_count": 1
+    },
+    {
+      "request_id": "home-to-candidate.20990105.return.two-wheeler",
+      "journey_id": "home-to-candidate",
+      "journey_label": "住家到應徵公司",
+      "date": "2099-01-05",
+      "direction": "return",
+      "points": [
+        {"label": "示例應徵公司", "location": {"address": "範例市創新路 100 號"}},
+        {"label": "示例住家", "location": {"address": "範例市和平路 1 號"}}
+      ],
+      "travel_mode": "TWO_WHEELER",
+      "departure_time": "2099-01-05T18:00:00+08:00",
+      "expected_leg_count": 1
+    },
+    {
+      "request_id": "rental-via-school.20990105.outbound.two-wheeler",
+      "journey_id": "rental-via-school",
+      "journey_label": "租屋處經學校到應徵公司",
+      "date": "2099-01-05",
+      "direction": "outbound",
+      "points": [
+        {"label": "示例租屋處", "location": {"address": "範例市自由路 20 號"}},
+        {"label": "示例學校", "location": {"place_id": "ChIJFictionalSchool"}},
+        {"label": "示例應徵公司", "location": {"address": "範例市創新路 100 號"}}
+      ],
+      "travel_mode": "TWO_WHEELER",
+      "departure_time": "2099-01-05T08:00:00+08:00",
+      "expected_leg_count": 2
+    },
+    {
+      "request_id": "rental-via-school.20990105.return.two-wheeler",
+      "journey_id": "rental-via-school",
+      "journey_label": "租屋處經學校到應徵公司",
+      "date": "2099-01-05",
+      "direction": "return",
+      "points": [
+        {"label": "示例應徵公司", "location": {"address": "範例市創新路 100 號"}},
+        {"label": "示例租屋處", "location": {"address": "範例市自由路 20 號"}}
+      ],
+      "travel_mode": "TWO_WHEELER",
+      "departure_time": "2099-01-05T18:00:00+08:00",
+      "expected_leg_count": 1
+    }
+  ],
+  "plan_id": "sha256:afd0a66ac225cece00efa3eac1f1bfa34a7a20ed2f95fab860b90337a211fe05"
+}
