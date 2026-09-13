@@ -2,7 +2,7 @@
 
 所有值得注意的變更都記錄在此。版本遵循 Semantic Versioning。
 
-## [Unreleased]
+## [2.0.0] - 2026-09-14
 
 ### Added
 
@@ -27,11 +27,6 @@
 - 修正 Windows PowerShell 與 Python 使用不同 native pipe／Console encoding 時，中文 plan request 可能
   在計算 `plan_id` 時觸發 `UnicodeEncodeError`，或 stdout 無法由 `ConvertFrom-Json` 解析；CLI 現在
   明確固定 UTF-8 stdio，並以 ASCII-safe JSON escapes 跨 code page 傳遞非 ASCII 內容。
-
-### Development status
-
-- Issue #20 階段 2A–2C 已完成本機 schema、planning、run、分析、私人產物與 mock E2E；正式
-  v2.0.0 仍須完成獨立的真實 API smoke 與發布驗收。
 
 ## [1.1.0] - 2026-09-13
 

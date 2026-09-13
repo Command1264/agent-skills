@@ -5,8 +5,7 @@
 
 ## 目前狀態
 
-Repository foundation、`google-routes` v2 與 `commute-analyzer` v1 穩定版已發布；
-`commute-analyzer v2.0.0` 候選版已完成本機 mock E2E，仍待正式 smoke 與發布驗收。
+Repository foundation、`google-routes` v2 與 `commute-analyzer` v2 穩定版已發布。
 已確認但尚未進入實作的 maintainability 與 internationalization 工作記錄於
 [`TODO.md`](TODO.md)。
 
@@ -15,7 +14,7 @@ Repository foundation、`google-routes` v2 與 `commute-analyzer` v1 穩定版�
 | Skill | 用途 | 狀態 |
 | --- | --- | --- |
 | `google-routes` | 封裝 Google Routes API，輸出穩定 JSON | v2.1.0 |
-| `commute-analyzer` | 以任意起終點與多站 Journey 估算並比較未來通勤時間 | v2.0.0 候選 |
+| `commute-analyzer` | 以任意起終點與多站 Journey 估算並比較未來通勤時間 | v2.0.0 |
 
 ## 安裝
 
