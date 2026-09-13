@@ -189,7 +189,7 @@ def run(
 
     json.dump(
         {
-            "schema_version": "1",
+            "schema_version": "2",
             "smoke_test": {
                 "skill_name": "commute-analyzer",
                 "skill_version": commute_analyzer.SKILL_VERSION,
@@ -238,15 +238,14 @@ def _build_smoke_query(plan: Mapping[str, object]) -> dict[str, object]:
         requests.append(
             {
                 "request_id": f"smoke-{mode.lower().replace('_', '-')}",
-                "origin": sample["origin"],
-                "destination": sample["destination"],
+                "points": sample["points"],
                 "travel_mode": mode,
                 "departure_time": sample["departure_time"],
             }
         )
     return {
-        "schema_version": "1",
-        "profile": "summary",
+        "schema_version": "2",
+        "profile": "itinerary_summary",
         "rate_limit_qpm": preview["rate_limit_qpm"],
         "requests": requests,
     }
@@ -394,7 +393,7 @@ def _write_error(
 ) -> int:
     json.dump(
         {
-            "schema_version": "1",
+            "schema_version": "2",
             "error": {"code": code, "path": path, "message": message},
         },
         stdout,

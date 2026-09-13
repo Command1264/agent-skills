@@ -17,11 +17,12 @@ capabilities；路徑或能力改變就拒絕舊 plan。
 ## 安裝或更新
 
 ```powershell
-npx skills add Command1264/agent-skills --skill google-routes
+npx skills add Command1264/agent-skills
 ```
 
-必要能力為：Skill major `2`、CLI contract `2.0.0`、schema `1`、`summary` profile，
-以及 `DRIVE`、`TWO_WHEELER`。不相容時使用同一命令更新，再重新建立 plan。
+必要能力為：Skill major `2`、CLI contract `2.0.0`、schema `2`、`itinerary_summary` profile、
+`DRIVE`／`TWO_WHEELER`，以及 2–12 Points、最多 10 個 stopover intermediates、fixed order 且不支援
+optimization。不相容時使用同一命令更新，再重新建立 plan。
 
 `commute-analyzer` 不解析 dependency 的 credential，也不把 API key 放進 subprocess argument
 或 environment。請先從解析到的 `google-routes` 目錄執行 `credentials check`；credential
