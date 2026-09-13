@@ -84,6 +84,21 @@ _避免使用_：遇到 429 才降速、無上限平行請求、保證永不發�
 路線查詢 Skill 對單次預測結果提供的穩定結構化資料。預設 `summary` profile 只包含 request ID、狀態、距離、含交通時間、靜態時間、警告、fallback 與地址對應的 Place ID；不包含 polyline、導航步驟、viewport、route token 或完整 Google response。平均通勤 Skill 只依賴此契約，不直接依賴 Google 的原始回應格式。未來有實際用途時可新增具名 output profile，不改變既有 `summary` 契約。
 _避免使用_：Google 原始 response、通勤摘要
 
+**命名路線點（Named Route Point）**：
+路線中帶有非敏感 label 的有序地點，可作為起點、終點或中途停靠點；location 恰好使用
+`address` 或 `place_id`。label 用於預覽與結果對應，不送給 provider，也不應填入完整地址。
+_避免使用_：地址標籤、公司設定、座標點
+
+**固定順序多站路線（Fixed-order Itinerary）**：
+由 2–12 個 Named Route Points 組成的單次 Compute Routes 查詢。第一點是起點、最後一點是終點，
+中間 0–10 點是依使用者順序停靠的 stopovers；第一版不自動重新排序，也不支援 pass-through `via`。
+_避免使用_：最佳化行程、Route Matrix、多筆獨立路線
+
+**路線分段（Route Leg）**：
+固定順序多站路線中，相鄰兩個非 `via` Points 之間的正規化距離與時間。所有 Legs 合成一筆
+Route Query Result；leg 數不是 provider request 數。
+_避免使用_：導航步驟、獨立 API request、完整 provider leg
+
 **嚴格 JSON Envelope（Strict JSON Envelope）**：
 跨 Skill CLI 的輸入與輸出都帶有 `schema_version`。必要欄位缺失、型別錯誤或未知欄位都採 fail-closed，錯誤必須指出精確 JSON path；新增欄位須透過新的 schema 版本表達。`stdout` 只包含 JSON，進度與診斷寫入 `stderr`。
 _避免使用_：忽略未知欄位、混合文字輸出、無版本 JSON

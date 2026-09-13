@@ -18,6 +18,12 @@
       "prompt": "幫我算下個月每週一到週五從家到公司的平均通勤時間，並把每月總通勤時間估出來。",
       "expected_output": "辨識為通勤排程與統計需求，轉用 commute-analyzer，而不是直接用 google-routes 承擔日期展開與平均計算。",
       "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "明天早上八點請幫我查從住家出發，先停學校，再到公司的開車時間；請分別列出每一段與總時間。",
+      "expected_output": "使用 query schema v2 與 itinerary_summary，以住家、學校、公司三個 ordered points 建立一筆 DRIVE request；呼叫前顯示一個中途點、推定 SKU、QPM 與重試上限，結果只顯示 labels、分段與總計，不重述地址。",
+      "files": []
     }
   ]
 }

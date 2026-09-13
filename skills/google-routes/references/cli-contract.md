@@ -15,24 +15,29 @@ Credential commands 與 `capabilities` 都不呼叫 Google API。`credentials se
 
 ## Query envelope
 
-輸入遵循 [`../schemas/query-v1.schema.json`](../schemas/query-v1.schema.json)。每個
-location 必須且只能使用 `address` 或 `place_id`。所有 object 都拒絕未知欄位；新增
-欄位必須使用新的 schema version。
+直接起終點輸入遵循 [`../schemas/query-v1.schema.json`](../schemas/query-v1.schema.json)，
+並使用 `summary` profile。多站輸入遵循
+[`../schemas/query-v2.schema.json`](../schemas/query-v2.schema.json)，使用
+`itinerary_summary` profile，以 2–12 個 ordered points 表示起點、0–10 個固定順序 stopovers
+與終點。每個 location 必須且只能使用 `address` 或 `place_id`；label 只供本機結果對應，
+不送給 Google。所有 object 都拒絕未知欄位。
 
 `DRIVE` 固定對應 `TRAFFIC_AWARE_OPTIMAL` 與 `BEST_GUESS`；`TWO_WHEELER` 固定對應
 `TRAFFIC_AWARE`，不傳送 `trafficModel`。兩者都只請求主要建議路線。
 
 ## Result envelope
 
-輸出遵循 [`../schemas/result-v1.schema.json`](../schemas/result-v1.schema.json)。批次狀態：
+`summary` 輸出遵循 [`../schemas/result-v1.schema.json`](../schemas/result-v1.schema.json)；
+`itinerary_summary` 遵循 [`../schemas/result-v2.schema.json`](../schemas/result-v2.schema.json)，
+另提供不含地址的 point label／Place ID 與逐段 distance／duration。批次狀態：
 
 - `success`：所有項目完整成功。
 - `degraded`：沒有失敗，但至少一項含 Google `fallbackInfo`。
 - `partial_success`：至少一項成功或降級，且至少一項失敗。
 - `failure`：所有項目失敗。
 
-每筆結果保留 `request_id`。`summary` 不含 polyline、steps、viewport、route token 或
-完整 provider response。
+每筆結果保留 `request_id`。兩個 profile 都不含 polyline、steps、viewport、route token、
+完整地址或完整 provider response。
 
 ## Exit codes
 
