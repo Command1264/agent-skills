@@ -41,8 +41,32 @@ _避免使用_：歷史樣本、實際通勤紀錄
 _避免使用_：真實平均交通時間、過去四週平均
 
 **通勤設定檔（Commute Profile）**：
-保存在本機的私人設定，包含住家位置、預設工作日、出發時間、時區與交通模式。通勤設定檔不得提交至公開 repository。
+保存在本機的私人設定，包含可重用的命名地點、出發時間與時區；舊版也可以住家與公司表示相同用途。通勤設定檔不得提交至公開 repository。
 _避免使用_：公開預設值、Skill 內建住家地址
+
+**命名地點（Named Location）**：
+通勤設定檔中可重用的私人地點，具有穩定 id、非地址 label，以及恰好一種 address 或 place ID；它不預設代表住家、公司或其他角色。
+_避免使用_：公司地點、住家欄位、公開地點
+
+**命名地點目錄（Named Location Catalog）**：
+同一份通勤設定檔所擁有的 Named Locations 集合，以唯一 id 供不同 Commute Journeys 引用。
+_避免使用_：公司清單、地址簿、公開地點資料庫
+
+**臨時地點（Inline Location）**：
+只在一次私人 plan request 與其 Execution Plan 中存在的 Named Route Point，不會自動加入 Named Location Catalog 或改寫設定。
+_避免使用_：自動保存地點、暫存公司設定、公開地址
+
+**通勤行程（Commute Journey）**：
+通勤分析與排序的單位，由穩定 id、顯示 label，以及各自有序的去程與回程 Points 組成；起訖點不帶住家或公司角色限制。
+_避免使用_：公司分析、單一路線、導航行程
+
+**行程方向（Journey Direction）**：
+Commute Journey 的 outbound 或 return 半程，各自具有 2–12 個固定順序 Points；return 不必與 outbound 經過相同地點。
+_避免使用_：早上路線、晚上路線、自動反向路線
+
+**行程排序（Journey Ranking）**：
+多個 Commute Journeys 依完整機車必要樣本的每日來回平均預測時間由短至長排列；未要求機車或必要樣本不完整的行程不參與排序。
+_避免使用_：公司排序、通勤評分、職缺排名
 
 **一週預測取樣（One-week Predictive Sampling）**：
 從 `start_date` 起選取 `weeks` 範圍內指定的 `weekdays`，針對每天的早晚出發時間建立預測通勤樣本。`start_date` 預設為下一個星期一、`weeks` 預設為一週、`weekdays` 預設為週一至週五；第一版不自動排除國定假日，所有選定日期共用一組早晚出發時間。
@@ -128,7 +152,7 @@ _避免使用_：repository 設定、公開範例設定
 _避免使用_：單一 runtime 路徑驗證、自動 secret 遷移、相同字串即相同檔案
 
 **公司設定（Company Configuration）**：
-私人通勤設定中的可重用目的地，包含穩定 `id`、顯示名稱，以及恰好一種 `address` 或 `place_id`。CLI 也可加入只用於當次計畫的公司，不自動寫回私人設定；未來的公司別早晚時間覆寫不是第一版行為。
+第一版私人通勤設定中的可重用目的地，包含穩定 `id`、顯示名稱，以及恰好一種 `address` 或 `place_id`；v2 以不帶角色限制的 Named Location 與 Commute Journey 取代。CLI 加入的臨時公司不會自動寫回私人設定。
 _避免使用_：公開公司清單、自動保存臨時輸入、多個位置來源
 
 **Place ID 建議更新（Suggested Place ID Update）**：
@@ -144,5 +168,5 @@ _避免使用_：IANA 時區、完整 DST 支援、本機隱含時區
 _避免使用_：成功、整批失敗、忽略錯誤
 
 **通勤排序（Commute Ranking）**：
-多公司比較時，依機車每日來回平均時間由短至長排列的結果。第一版不使用不透明的綜合分數。
+第一版多公司比較時，依機車每日來回平均時間由短至長排列的結果；v2 的對應概念是 Journey Ranking。第一版不使用不透明的綜合分數。
 _避免使用_：通勤評分、職缺排名
