@@ -208,7 +208,7 @@ class CommuteSmokeTests(unittest.TestCase):
                 "schema_version": "1",
                 "smoke_test": {
                     "skill_name": "commute-analyzer",
-                    "skill_version": "1.0.0",
+                    "skill_version": "1.1.0",
                     "google_routes_skill_version": "2.0.0",
                     "status": "success",
                     "request_count": 2,

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Callable, Mapping, TextIO
 
 
-SKILL_VERSION = "1.0.0"
+SKILL_VERSION = "1.1.0"
 CLI_CONTRACT_VERSION = "1.0.0"
 INSTALL_COMMAND = "npx skills add Command1264/agent-skills --skill google-routes"
 SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
@@ -732,8 +732,8 @@ def default_private_paths(
     *, platform_name: str, environ: Mapping[str, str], home: Path
 ) -> dict[str, Path]:
     if platform_name == "win32":
-        config_base = Path(environ.get("APPDATA", str(home / "AppData" / "Roaming")))
-        data_base = Path(environ.get("LOCALAPPDATA", str(home / "AppData" / "Local")))
+        config_base = home / ".config"
+        data_base = home / ".local" / "share"
     elif platform_name == "darwin":
         config_base = home / "Library" / "Application Support"
         data_base = config_base
@@ -741,7 +741,12 @@ def default_private_paths(
         config_base = Path(environ.get("XDG_CONFIG_HOME", str(home / ".config")))
         data_base = Path(environ.get("XDG_DATA_HOME", str(home / ".local" / "share")))
     relative = Path("command1264-skills") / "commute-analyzer"
-    config = Path(environ.get("COMMUTE_ANALYZER_CONFIG", str(config_base / relative / "config.json")))
+    config = Path(
+        environ.get(
+            "COMMUTE_ANALYZER_CONFIG",
+            str(config_base / relative / "config.json"),
+        )
+    )
     data = data_base / relative
     return {
         "config": config,
@@ -751,13 +756,116 @@ def default_private_paths(
     }
 
 
+def legacy_windows_private_paths(
+    *, environ: Mapping[str, str], home: Path
+) -> dict[str, Path]:
+    config_base = Path(environ.get("APPDATA", str(home / "AppData" / "Roaming")))
+    data_base = Path(environ.get("LOCALAPPDATA", str(home / "AppData" / "Local")))
+    relative = Path("command1264-skills") / "commute-analyzer"
+    data = data_base / relative
+    return {
+        "config": config_base / relative / "config.json",
+        "data": data,
+        "reports": data / "reports",
+        "ledger": data / "usage.jsonl",
+    }
+
+
+def resolve_private_config(
+    *, platform_name: str, environ: Mapping[str, str], home: Path
+) -> dict[str, object]:
+    default_environ = {
+        key: value
+        for key, value in environ.items()
+        if key != "COMMUTE_ANALYZER_CONFIG"
+    }
+    default_path = default_private_paths(
+        platform_name=platform_name,
+        environ=default_environ,
+        home=home,
+    )["config"]
+    override = environ.get("COMMUTE_ANALYZER_CONFIG")
+    legacy_path = None
+    if platform_name == "win32":
+        legacy_path = legacy_windows_private_paths(environ=environ, home=home)["config"]
+    if override:
+        path = Path(override)
+        source = "environment_override"
+        migration_required = False
+        warnings: list[dict[str, str]] = []
+    elif default_path.is_file() or legacy_path is None or not legacy_path.is_file():
+        path = default_path
+        source = "cross_runtime_default"
+        migration_required = False
+        warnings = []
+    else:
+        path = legacy_path
+        source = "legacy_windows_appdata"
+        migration_required = True
+        warnings = [
+            {
+                "code": "legacy_windows_appdata_path",
+                "message": (
+                    "目前使用舊 Windows AppData config；"
+                    "請人工移至跨 runtime 預設路徑"
+                ),
+            }
+        ]
+    return {
+        "path": path,
+        "default_path": default_path,
+        "source": source,
+        "configured": path.is_file(),
+        "migration_required": migration_required,
+        "legacy_path": legacy_path,
+        "warnings": warnings,
+    }
+
+
+def _config_metadata(resolution: Mapping[str, object]) -> dict[str, object]:
+    return {
+        "path": str(resolution["path"]),
+        "default_path": str(resolution["default_path"]),
+        "source": resolution["source"],
+        "configured": resolution["configured"],
+        "migration_required": resolution["migration_required"],
+        "legacy_path": (
+            str(resolution["legacy_path"])
+            if resolution["legacy_path"] is not None
+            else None
+        ),
+        "warnings": resolution["warnings"],
+    }
+
+
+def _print_config_warnings(
+    resolution: Mapping[str, object], stderr: TextIO
+) -> None:
+    warnings = resolution.get("warnings")
+    if not isinstance(warnings, list):
+        return
+    for warning in warnings:
+        if not isinstance(warning, dict):
+            continue
+        print(
+            f"Config warning [{warning.get('code')}]: {warning.get('message')}",
+            file=stderr,
+        )
+
+
 def capabilities() -> dict[str, object]:
     return {
         "skill_name": "commute-analyzer",
         "skill_version": SKILL_VERSION,
         "cli_contract_version": CLI_CONTRACT_VERSION,
         "schema_versions": ["1"],
-        "commands": ["capabilities", "plan", "run"],
+        "commands": [
+            "capabilities",
+            "config path",
+            "config check",
+            "plan",
+            "run",
+        ],
         "required_google_routes": {
             "skill_major": 2,
             "cli_contract_version": "2.0.0",
@@ -812,8 +920,39 @@ def run_cli(
     if argv == ["capabilities"]:
         _write_json(stdout, capabilities())
         return 0
+    if argv == ["config", "path"]:
+        resolution = resolve_private_config(
+            platform_name=sys.platform if platform_name is None else platform_name,
+            environ=environ,
+            home=Path.home() if home is None else home,
+        )
+        _write_json(
+            stdout,
+            {
+                "schema_version": "1",
+                "config": _config_metadata(resolution),
+            },
+        )
+        return 0
+    if argv == ["config", "check"]:
+        resolution = resolve_private_config(
+            platform_name=sys.platform if platform_name is None else platform_name,
+            environ=environ,
+            home=Path.home() if home is None else home,
+        )
+        try:
+            config = _validate_config(_read_json_file(Path(resolution["path"])))
+        except InputError as error:
+            return _write_input_error(error, stdout, stderr)
+        metadata = _config_metadata(resolution)
+        metadata["content_schema_version"] = config["schema_version"]
+        _write_json(stdout, {"schema_version": "1", "config": metadata})
+        _print_config_warnings(resolution, stderr)
+        print("私人通勤設定有效。", file=stderr)
+        return 0
     if argv and argv[0] == "plan":
         config_argument: str | None = None
+        config_resolution: dict[str, object] | None = None
         if len(argv) == 3 and argv[1] == "--config":
             config_argument = argv[2]
         elif len(argv) != 1:
@@ -823,14 +962,15 @@ def run_cli(
             effective_home = Path.home() if home is None else home
             effective_cwd = Path.cwd() if cwd is None else cwd
             effective_platform = sys.platform if platform_name is None else platform_name
-            private_paths = default_private_paths(
-                platform_name=effective_platform,
-                environ=environ,
-                home=effective_home,
-            )
-            config_path = (
-                Path(config_argument) if config_argument else private_paths["config"]
-            )
+            if config_argument:
+                config_path = Path(config_argument)
+            else:
+                config_resolution = resolve_private_config(
+                    platform_name=effective_platform,
+                    environ=environ,
+                    home=effective_home,
+                )
+                config_path = Path(config_resolution["path"])
             config_value = _read_json_file(config_path)
             commute_skill_dir = Path(__file__).resolve().parents[1]
             dependency_path = discover_google_routes(
@@ -869,6 +1009,8 @@ def run_cli(
         except InputError as error:
             return _write_input_error(error, stdout, stderr)
         _write_json(stdout, plan)
+        if config_resolution is not None:
+            _print_config_warnings(config_resolution, stderr)
         print(
             "計畫已建立，不會呼叫 Routes API："
             f"{plan['preview']['request_count']} 筆 request。",
@@ -1433,7 +1575,12 @@ def _read_json_file(path: Path) -> object:
         with path.open("r", encoding="utf-8") as stream:
             return json.load(stream)
     except FileNotFoundError as error:
-        raise InputError("CONFIG_NOT_FOUND", "找不到私人設定檔", "$config") from error
+        raise InputError(
+            "CONFIG_NOT_FOUND",
+            "找不到私人設定檔；請執行 config path 查看新預設與 legacy 路徑，"
+            "再人工建立或遷移 config",
+            "$config",
+        ) from error
     except (OSError, json.JSONDecodeError) as error:
         raise InputError("INVALID_CONFIG", "私人設定檔無法讀取或不是有效 JSON", "$config") from error
 
@@ -1462,11 +1609,14 @@ def _write_usage_error(stdout: TextIO, stderr: TextIO) -> int:
             "error": {
                 "code": "USAGE_ERROR",
                 "path": "$command",
-                "message": "用法：commute_analyzer.py capabilities | plan [--config PATH] | run",
+                "message": (
+                    "用法：commute_analyzer.py capabilities | config path | "
+                    "config check | plan [--config PATH] | run"
+                ),
             },
         },
     )
-    print("請指定 capabilities、plan 或 run。", file=stderr)
+    print("請指定 capabilities、config path、config check、plan 或 run。", file=stderr)
     return 2
 
 
