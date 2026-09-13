@@ -11,7 +11,7 @@ Repository foundation、`google-routes` v2 與 `commute-analyzer` v1 穩定版�
 
 | Skill | 用途 | 狀態 |
 | --- | --- | --- |
-| `google-routes` | 封裝 Google Routes API，輸出穩定 JSON | v2.0.0 |
+| `google-routes` | 封裝 Google Routes API，輸出穩定 JSON | v2.1.0 |
 | `commute-analyzer` | 以未來工作日樣本估算並比較住家與公司的通勤時間 | v1.1.0 |
 
 ## 安裝
@@ -130,7 +130,7 @@ Get-Content .\plan-request.json | python "$HOME\.agents\skills\commute-analyzer\
 
 目前 plan 的起點仍固定取自 config 的 `home`。若要在住家與租屋處之間切換，可各自保存一份私人
 config，並以 `plan --config <路徑>` 選擇；目前不能在 plan request 內臨時覆寫起點。
-`commute-analyzer` v1 目前仍不支援中途停靠點；`google-routes` v2.1 開發版已能查詢最多 10 個
+`commute-analyzer` v1 目前仍不支援中途停靠點；`google-routes` v2.1.0 已能查詢最多 10 個
 固定順序停靠點。只需臨時查詢任意起點、終點或多站路線，不需要通勤平均時，可直接要求 Agent
 使用 `google-routes`。命名地點與多站通勤分析將由 `commute-analyzer` v2 提供。
 

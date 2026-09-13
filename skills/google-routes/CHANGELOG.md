@@ -2,7 +2,7 @@
 
 本 Skill 依 [Semantic Versioning](https://semver.org/) 獨立版本化。
 
-## [Unreleased]
+## [2.1.0] - 2026-09-13
 
 ### Added
 
