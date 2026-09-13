@@ -130,8 +130,9 @@ Get-Content .\plan-request.json | python "$HOME\.agents\skills\commute-analyzer\
 
 目前 plan 的起點仍固定取自 config 的 `home`。若要在住家與租屋處之間切換，可各自保存一份私人
 config，並以 `plan --config <路徑>` 選擇；目前不能在 plan request 內臨時覆寫起點。
-`commute-analyzer` 與 `google-routes` 目前也都不支援中途停靠點。只需臨時查詢任意起點與終點、
-不需要通勤平均時，可直接要求 Agent 使用 `google-routes`。
+`commute-analyzer` v1 目前仍不支援中途停靠點；`google-routes` v2.1 開發版已能查詢最多 10 個
+固定順序停靠點。只需臨時查詢任意起點、終點或多站路線，不需要通勤平均時，可直接要求 Agent
+使用 `google-routes`。命名地點與多站通勤分析將由 `commute-analyzer` v2 提供。
 
 詳細欄位、確認門檻、輸出與錯誤處理見
 [`commute-analyzer` CLI contract](skills/commute-analyzer/references/cli-contract.md)。

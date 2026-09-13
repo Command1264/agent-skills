@@ -1,0 +1,40 @@
+{
+  "schema_version": "2",
+  "cli_contract_version": "2.0.0",
+  "profile": "itinerary_summary",
+  "status": "success",
+  "results": [
+    {
+      "request_id": "example-itinerary-1",
+      "status": "success",
+      "travel_mode": "DRIVE",
+      "distance_meters": 12345,
+      "duration_seconds": 1250.5,
+      "static_duration_seconds": 1100,
+      "warnings": [],
+      "fallback": null,
+      "points": [
+        {"label": "示例住家", "place_id": "ChIJExampleOrigin"},
+        {"label": "示例學校", "place_id": "ChIJExampleStop"},
+        {"label": "示例公司", "place_id": "ChIJExampleDestination"}
+      ],
+      "legs": [
+        {
+          "from_label": "示例住家",
+          "to_label": "示例學校",
+          "distance_meters": 4000,
+          "duration_seconds": 500,
+          "static_duration_seconds": 450
+        },
+        {
+          "from_label": "示例學校",
+          "to_label": "示例公司",
+          "distance_meters": 8345,
+          "duration_seconds": 750.5,
+          "static_duration_seconds": 650
+        }
+      ],
+      "attempts": 1
+    }
+  ]
+}

@@ -18,9 +18,10 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 import google_routes_credentials
 
 
-SKILL_VERSION = "2.0.0"
+SKILL_VERSION = "2.1.0"
 CLI_CONTRACT_VERSION = "2.0.0"
 SCHEMA_VERSION = "1"
+SUPPORTED_SCHEMA_VERSIONS = ("1", "2")
 ROUTES_ENDPOINT = "https://routes.googleapis.com/directions/v2:computeRoutes"
 FIELD_MASK = ",".join(
     (
@@ -32,6 +33,16 @@ FIELD_MASK = ",".join(
         "fallbackInfo.reason",
         "geocodingResults.origin.placeId",
         "geocodingResults.destination.placeId",
+    )
+)
+ITINERARY_FIELD_MASK = ",".join(
+    (
+        FIELD_MASK,
+        "routes.legs.distanceMeters",
+        "routes.legs.duration",
+        "routes.legs.staticDuration",
+        "geocodingResults.intermediates.intermediateWaypointRequestIndex",
+        "geocodingResults.intermediates.placeId",
     )
 )
 MAX_RETRIES = 2
@@ -153,7 +164,7 @@ def capabilities() -> dict[str, object]:
         "skill_name": "google-routes",
         "skill_version": SKILL_VERSION,
         "cli_contract_version": CLI_CONTRACT_VERSION,
-        "schema_versions": [SCHEMA_VERSION],
+        "schema_versions": list(SUPPORTED_SCHEMA_VERSIONS),
         "commands": [
             "capabilities",
             "credentials path",
@@ -162,7 +173,19 @@ def capabilities() -> dict[str, object]:
             "query",
         ],
         "travel_modes": list(SUPPORTED_TRAVEL_MODES),
-        "output_profiles": ["summary"],
+        "output_profiles": ["summary", "itinerary_summary"],
+        "itinerary_limits": {
+            "minimum_points": 2,
+            "maximum_points": 12,
+            "maximum_intermediate_waypoints": 10,
+            "waypoint_order": "fixed",
+            "intermediate_type": "stopover",
+            "optimization_supported": False,
+        },
+        "estimated_sku_by_travel_mode": {
+            "DRIVE": "Routes: Compute Routes Pro",
+            "TWO_WHEELER": "Routes: Compute Routes Enterprise",
+        },
         "default_rate_limit_qpm": 60,
         "rate_limit_qpm_range": {"minimum": 1, "maximum": 3000},
         "max_retries": MAX_RETRIES,
@@ -177,10 +200,14 @@ def validate_batch(value: object) -> dict[str, object]:
         "$",
     )
     _require_fields(payload, {"schema_version", "profile", "requests"}, "$")
-    if payload["schema_version"] != SCHEMA_VERSION:
-        raise InputError("$.schema_version", f"只支援版本 {SCHEMA_VERSION}")
-    if payload["profile"] != "summary":
-        raise InputError("$.profile", "只支援 summary")
+    schema_version = payload["schema_version"]
+    if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
+        raise InputError(
+            "$.schema_version", f"只支援版本 {'、'.join(SUPPORTED_SCHEMA_VERSIONS)}"
+        )
+    expected_profile = "summary" if schema_version == "1" else "itinerary_summary"
+    if payload["profile"] != expected_profile:
+        raise InputError("$.profile", f"schema v{schema_version} 必須使用 {expected_profile}")
     qpm = payload.get("rate_limit_qpm", 60)
     if isinstance(qpm, bool) or not isinstance(qpm, int) or not 1 <= qpm <= 3000:
         raise InputError("$.rate_limit_qpm", "必須是 1 到 3000 的整數")
@@ -193,16 +220,13 @@ def validate_batch(value: object) -> dict[str, object]:
     for index, item in enumerate(requests):
         path = f"$.requests[{index}]"
         request_item = _require_object(item, path)
-        _reject_unknown(
-            request_item,
-            {"request_id", "origin", "destination", "travel_mode", "departure_time"},
-            path,
+        route_fields = (
+            {"request_id", "origin", "destination", "travel_mode", "departure_time"}
+            if schema_version == "1"
+            else {"request_id", "points", "travel_mode", "departure_time"}
         )
-        _require_fields(
-            request_item,
-            {"request_id", "origin", "destination", "travel_mode", "departure_time"},
-            path,
-        )
+        _reject_unknown(request_item, route_fields, path)
+        _require_fields(request_item, route_fields, path)
         request_id = _require_nonempty_string(request_item["request_id"], f"{path}.request_id")
         if not REQUEST_ID.fullmatch(request_id):
             raise InputError(
@@ -212,8 +236,36 @@ def validate_batch(value: object) -> dict[str, object]:
         if request_id in request_ids:
             raise InputError(f"{path}.request_id", "request_id 不得重複")
         request_ids.add(request_id)
-        origin = _validate_location(request_item["origin"], f"{path}.origin")
-        destination = _validate_location(request_item["destination"], f"{path}.destination")
+        route_locations: dict[str, object]
+        if schema_version == "1":
+            route_locations = {
+                "origin": _validate_location(request_item["origin"], f"{path}.origin"),
+                "destination": _validate_location(
+                    request_item["destination"], f"{path}.destination"
+                ),
+            }
+        else:
+            points_value = request_item["points"]
+            if not isinstance(points_value, list) or not 2 <= len(points_value) <= 12:
+                raise InputError(f"{path}.points", "必須包含 2 到 12 個有順序的地點")
+            points: list[dict[str, object]] = []
+            for point_index, point_value in enumerate(points_value):
+                point_path = f"{path}.points[{point_index}]"
+                point = _require_object(point_value, point_path)
+                _reject_unknown(point, {"label", "location"}, point_path)
+                _require_fields(point, {"label", "location"}, point_path)
+                label = _require_nonempty_string(point["label"], f"{point_path}.label")
+                if len(label) > 80:
+                    raise InputError(f"{point_path}.label", "不得超過 80 個字元")
+                points.append(
+                    {
+                        "label": label,
+                        "location": _validate_location(
+                            point["location"], f"{point_path}.location"
+                        ),
+                    }
+                )
+            route_locations = {"points": points}
         travel_mode = request_item["travel_mode"]
         if travel_mode not in SUPPORTED_TRAVEL_MODES:
             raise InputError(
@@ -226,15 +278,14 @@ def validate_batch(value: object) -> dict[str, object]:
         validated_requests.append(
             {
                 "request_id": request_id,
-                "origin": origin,
-                "destination": destination,
+                **route_locations,
                 "travel_mode": travel_mode,
                 "departure_time": departure_time,
             }
         )
     return {
-        "schema_version": SCHEMA_VERSION,
-        "profile": "summary",
+        "schema_version": schema_version,
+        "profile": expected_profile,
         "rate_limit_qpm": qpm,
         "requests": validated_requests,
     }
@@ -242,9 +293,20 @@ def validate_batch(value: object) -> dict[str, object]:
 
 def build_provider_request(item: Mapping[str, object]) -> dict[str, object]:
     travel_mode = str(item["travel_mode"])
+    if "points" in item:
+        points = item["points"]
+        assert isinstance(points, list)
+        locations = [point["location"] for point in points]
+        origin = locations[0]
+        destination = locations[-1]
+        intermediates = [_provider_location(location) for location in locations[1:-1]]
+    else:
+        origin = item["origin"]
+        destination = item["destination"]
+        intermediates = []
     request: dict[str, object] = {
-        "origin": _provider_location(item["origin"]),
-        "destination": _provider_location(item["destination"]),
+        "origin": _provider_location(origin),
+        "destination": _provider_location(destination),
         "travelMode": travel_mode,
         "routingPreference": (
             "TRAFFIC_AWARE_OPTIMAL" if travel_mode == "DRIVE" else "TRAFFIC_AWARE"
@@ -252,6 +314,8 @@ def build_provider_request(item: Mapping[str, object]) -> dict[str, object]:
         "departureTime": item["departure_time"],
         "computeAlternativeRoutes": False,
     }
+    if intermediates:
+        request["intermediates"] = intermediates
     if travel_mode == "DRIVE":
         request["trafficModel"] = "BEST_GUESS"
     return request
@@ -278,7 +342,15 @@ def execute_batch(
         int(validated["rate_limit_qpm"]), sleep=sleep, monotonic=monotonic
     )
     results = [
-        _execute_one(item, api_key, adapter, limiter, sleep, max_retries)
+        _execute_one(
+            item,
+            api_key,
+            adapter,
+            limiter,
+            sleep,
+            max_retries,
+            str(validated["profile"]),
+        )
         for item in validated["requests"]
     ]
     statuses = {str(result["status"]) for result in results}
@@ -292,9 +364,9 @@ def execute_batch(
         batch_status, exit_code = "partial_success", 3
     return (
         {
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": validated["schema_version"],
             "cli_contract_version": CLI_CONTRACT_VERSION,
-            "profile": "summary",
+            "profile": validated["profile"],
             "status": batch_status,
             "results": results,
         },
@@ -309,11 +381,14 @@ def _execute_one(
     limiter: RateLimiter,
     sleep: Callable[[float], None],
     max_retries: int,
+    profile: str,
 ) -> dict[str, object]:
     headers = {
         "Content-Type": "application/json; charset=utf-8",
         "X-Goog-Api-Key": api_key,
-        "X-Goog-FieldMask": FIELD_MASK,
+        "X-Goog-FieldMask": (
+            ITINERARY_FIELD_MASK if profile == "itinerary_summary" else FIELD_MASK
+        ),
     }
     provider_request = build_provider_request(item)
     attempts = 0
@@ -396,6 +471,18 @@ def _normalize_response(
     geocoding = response.get("geocodingResults", {})
     if not isinstance(geocoding, dict):
         raise ValueError("invalid geocoding results")
+    if "points" in item:
+        return _normalize_itinerary_result(
+            item=item,
+            route=route,
+            geocoding=geocoding,
+            attempts=attempts,
+            distance=distance,
+            duration=duration,
+            static_duration=static_duration,
+            warnings=warnings,
+            fallback=fallback,
+        )
     origin_place_id = _resolved_place_id(item["origin"], geocoding.get("origin"))
     destination_place_id = _resolved_place_id(
         item["destination"], geocoding.get("destination")
@@ -411,6 +498,96 @@ def _normalize_response(
         "fallback": fallback,
         "origin_place_id": origin_place_id,
         "destination_place_id": destination_place_id,
+        "attempts": attempts,
+    }
+
+
+def _normalize_itinerary_result(
+    *,
+    item: Mapping[str, object],
+    route: Mapping[str, Any],
+    geocoding: Mapping[str, Any],
+    attempts: int,
+    distance: int,
+    duration: int | float,
+    static_duration: int | float,
+    warnings: list[str],
+    fallback: dict[str, str] | None,
+) -> dict[str, object]:
+    raw_points = item["points"]
+    assert isinstance(raw_points, list)
+    raw_legs = route.get("legs")
+    if not isinstance(raw_legs, list) or len(raw_legs) != len(raw_points) - 1:
+        raise ValueError("invalid itinerary legs")
+
+    intermediate_place_ids: dict[int, str] = {}
+    raw_intermediates = geocoding.get("intermediates", [])
+    if not isinstance(raw_intermediates, list):
+        raise ValueError("invalid intermediate geocoding results")
+    for value in raw_intermediates:
+        if not isinstance(value, dict):
+            raise ValueError("invalid intermediate geocoding result")
+        index = value.get("intermediateWaypointRequestIndex")
+        place_id = value.get("placeId")
+        if (
+            isinstance(index, bool)
+            or not isinstance(index, int)
+            or not 0 <= index < len(raw_points) - 2
+            or not isinstance(place_id, str)
+        ):
+            raise ValueError("invalid intermediate geocoding fields")
+        intermediate_place_ids[index] = place_id
+
+    normalized_points: list[dict[str, object]] = []
+    for index, raw_point in enumerate(raw_points):
+        assert isinstance(raw_point, dict)
+        location = raw_point["location"]
+        if index == 0:
+            place_id = _resolved_place_id(location, geocoding.get("origin"))
+        elif index == len(raw_points) - 1:
+            place_id = _resolved_place_id(location, geocoding.get("destination"))
+        else:
+            place_id = _resolved_place_id(location, None) or intermediate_place_ids.get(
+                index - 1
+            )
+        normalized_points.append(
+            {"label": raw_point["label"], "place_id": place_id}
+        )
+
+    normalized_legs: list[dict[str, object]] = []
+    for index, raw_leg in enumerate(raw_legs):
+        if not isinstance(raw_leg, dict):
+            raise ValueError("invalid itinerary leg")
+        leg_distance = raw_leg.get("distanceMeters")
+        if (
+            isinstance(leg_distance, bool)
+            or not isinstance(leg_distance, int)
+            or leg_distance < 0
+        ):
+            raise ValueError("invalid itinerary leg distance")
+        normalized_legs.append(
+            {
+                "from_label": normalized_points[index]["label"],
+                "to_label": normalized_points[index + 1]["label"],
+                "distance_meters": leg_distance,
+                "duration_seconds": _duration_seconds(raw_leg.get("duration")),
+                "static_duration_seconds": _duration_seconds(
+                    raw_leg.get("staticDuration")
+                ),
+            }
+        )
+
+    return {
+        "request_id": item["request_id"],
+        "status": "degraded" if fallback else "success",
+        "travel_mode": item["travel_mode"],
+        "distance_meters": distance,
+        "duration_seconds": duration,
+        "static_duration_seconds": static_duration,
+        "warnings": warnings,
+        "fallback": fallback,
+        "points": normalized_points,
+        "legs": normalized_legs,
         "attempts": attempts,
     }
 
