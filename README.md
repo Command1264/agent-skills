@@ -7,6 +7,8 @@
 
 Repository foundation、`google-routes` v2 與 `commute-analyzer` v1 穩定版已發布；
 `commute-analyzer v2.0.0` 候選版已完成本機 mock E2E，仍待正式 smoke 與發布驗收。
+已確認但尚未進入實作的 maintainability 與 internationalization 工作記錄於
+[`TODO.md`](TODO.md)。
 
 規劃中的第一批 Skills：
 
