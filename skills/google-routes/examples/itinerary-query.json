@@ -1,0 +1,26 @@
+{
+  "schema_version": "2",
+  "profile": "itinerary_summary",
+  "rate_limit_qpm": 60,
+  "requests": [
+    {
+      "request_id": "example-itinerary-1",
+      "points": [
+        {
+          "label": "示例住家",
+          "location": {"address": "示例市第一路 1 號"}
+        },
+        {
+          "label": "示例學校",
+          "location": {"address": "示例市第二路 2 號"}
+        },
+        {
+          "label": "示例公司",
+          "location": {"place_id": "ChIJExampleDestination"}
+        }
+      ],
+      "travel_mode": "DRIVE",
+      "departure_time": "2099-01-07T08:00:00+08:00"
+    }
+  ]
+}

@@ -47,6 +47,32 @@ def batch(*requests: dict[str, object]) -> dict[str, object]:
     }
 
 
+def itinerary_request(point_count: int = 3) -> dict[str, object]:
+    points = [
+        {
+            "label": f"地點 {index + 1}",
+            "location": {"address": f"示例市第 {index + 1} 站"},
+        }
+        for index in range(point_count)
+    ]
+    points[-1]["location"] = {"place_id": "ChIJExampleDestination"}
+    return {
+        "request_id": "itinerary-1",
+        "points": points,
+        "travel_mode": "DRIVE",
+        "departure_time": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+    }
+
+
+def itinerary_batch(*requests: dict[str, object]) -> dict[str, object]:
+    return {
+        "schema_version": "2",
+        "profile": "itinerary_summary",
+        "rate_limit_qpm": 60,
+        "requests": list(requests or (itinerary_request(),)),
+    }
+
+
 def provider_success(*, fallback: bool = False) -> dict[str, object]:
     response: dict[str, object] = {
         "routes": [
@@ -119,12 +145,30 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(stderr.getvalue(), "")
         result = json.loads(stdout.getvalue())
-        self.assertEqual(result["skill_version"], "2.0.0")
+        self.assertEqual(result["skill_version"], "2.1.0")
         self.assertEqual(result["cli_contract_version"], "2.0.0")
-        self.assertEqual(result["schema_versions"], ["1"])
+        self.assertEqual(result["schema_versions"], ["1", "2"])
         self.assertEqual(result["travel_modes"], ["DRIVE", "TWO_WHEELER"])
-        self.assertEqual(result["output_profiles"], ["summary"])
+        self.assertEqual(result["output_profiles"], ["summary", "itinerary_summary"])
         self.assertIn("credentials check", result["commands"])
+
+    def test_capabilities_advertise_fixed_order_itinerary_contract(self) -> None:
+        result = google_routes.capabilities()
+
+        self.assertEqual(result["skill_version"], "2.1.0")
+        self.assertEqual(result["schema_versions"], ["1", "2"])
+        self.assertEqual(result["output_profiles"], ["summary", "itinerary_summary"])
+        self.assertEqual(
+            result["itinerary_limits"],
+            {
+                "minimum_points": 2,
+                "maximum_points": 12,
+                "maximum_intermediate_waypoints": 10,
+                "waypoint_order": "fixed",
+                "intermediate_type": "stopover",
+                "optimization_supported": False,
+            },
+        )
 
     def test_unknown_field_reports_precise_json_path(self) -> None:
         payload = batch()
@@ -160,6 +204,25 @@ class ContractTests(unittest.TestCase):
             google_routes.validate_batch(payload)
 
         self.assertEqual(context.exception.path, "$.requests[0].request_id")
+
+    def test_itinerary_rejects_too_few_or_too_many_points_at_exact_path(self) -> None:
+        for point_count in (1, 13):
+            with self.subTest(point_count=point_count):
+                payload = itinerary_batch(itinerary_request(point_count))
+
+                with self.assertRaises(google_routes.InputError) as context:
+                    google_routes.validate_batch(payload)
+
+                self.assertEqual(context.exception.path, "$.requests[0].points")
+
+    def test_itinerary_point_rejects_unknown_field_at_exact_path(self) -> None:
+        payload = itinerary_batch()
+        payload["requests"][0]["points"][1]["address"] = "不應存在"
+
+        with self.assertRaises(google_routes.InputError) as context:
+            google_routes.validate_batch(payload)
+
+        self.assertEqual(context.exception.path, "$.requests[0].points[1].address")
 
 
 class ProviderMappingTests(unittest.TestCase):
@@ -201,6 +264,81 @@ class ProviderMappingTests(unittest.TestCase):
         sent_body = transport.calls[0]["body"]
         self.assertEqual(sent_body["routingPreference"], "TRAFFIC_AWARE")
         self.assertNotIn("trafficModel", sent_body)
+
+    def test_itinerary_maps_two_three_and_twelve_ordered_points(self) -> None:
+        for point_count in (2, 3, 12):
+            with self.subTest(point_count=point_count):
+                payload = itinerary_batch(itinerary_request(point_count))
+                validated = google_routes.validate_batch(payload)
+
+                sent_body = google_routes.build_provider_request(
+                    validated["requests"][0]
+                )
+
+                self.assertEqual(sent_body["origin"], {"address": "示例市第 1 站"})
+                self.assertEqual(
+                    sent_body["destination"], {"placeId": "ChIJExampleDestination"}
+                )
+                self.assertEqual(len(sent_body.get("intermediates", [])), point_count - 2)
+                if point_count > 2:
+                    self.assertEqual(
+                        sent_body["intermediates"][0], {"address": "示例市第 2 站"}
+                    )
+                self.assertNotIn("label", json.dumps(sent_body, ensure_ascii=False))
+                self.assertNotIn("optimizeWaypointOrder", sent_body)
+
+    def test_itinerary_normalizes_ordered_legs_and_point_place_ids(self) -> None:
+        response = provider_success()
+        response["routes"][0]["legs"] = [
+            {"distanceMeters": 4000, "duration": "500s", "staticDuration": "450s"},
+            {"distanceMeters": 8345, "duration": "750.5s", "staticDuration": "650s"},
+        ]
+        response["geocodingResults"]["intermediates"] = [
+            {"intermediateWaypointRequestIndex": 0, "placeId": "ChIJResolvedStop"}
+        ]
+        transport = FakeTransport([google_routes.HttpResponse(200, response, {})])
+
+        output, exit_code = google_routes.execute_batch(
+            itinerary_batch(),
+            api_key="test-key-not-a-real-secret",
+            transport=transport,
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(output["schema_version"], "2")
+        self.assertEqual(output["profile"], "itinerary_summary")
+        result = output["results"][0]
+        self.assertEqual(
+            result["points"],
+            [
+                {"label": "地點 1", "place_id": "ChIJResolvedOrigin"},
+                {"label": "地點 2", "place_id": "ChIJResolvedStop"},
+                {"label": "地點 3", "place_id": "ChIJExampleDestination"},
+            ],
+        )
+        self.assertEqual(
+            result["legs"],
+            [
+                {
+                    "from_label": "地點 1",
+                    "to_label": "地點 2",
+                    "distance_meters": 4000,
+                    "duration_seconds": 500,
+                    "static_duration_seconds": 450,
+                },
+                {
+                    "from_label": "地點 2",
+                    "to_label": "地點 3",
+                    "distance_meters": 8345,
+                    "duration_seconds": 750.5,
+                    "static_duration_seconds": 650,
+                },
+            ],
+        )
+        self.assertIn(
+            "routes.legs.distanceMeters",
+            transport.calls[0]["headers"]["X-Goog-FieldMask"],
+        )
 
     def test_summary_normalizes_duration_place_ids_and_fallback(self) -> None:
         transport = FakeTransport(
@@ -341,6 +479,44 @@ class ExampleTests(unittest.TestCase):
         self.assertEqual(payload["schema_version"], "1")
         self.assertNotIn("routes", json.dumps(payload))
         self.assertNotIn("polyline", json.dumps(payload))
+
+    def test_itinerary_examples_match_v2_contract_without_locations(self) -> None:
+        examples = ROOT / "skills" / "google-routes" / "examples"
+        query = json.loads(
+            (examples / "itinerary-query.json").read_text(encoding="utf-8")
+        )
+        result = json.loads(
+            (examples / "itinerary-result.json").read_text(encoding="utf-8")
+        )
+
+        validated = google_routes.validate_batch(query)
+
+        self.assertEqual(validated["schema_version"], "2")
+        self.assertEqual(validated["profile"], "itinerary_summary")
+        self.assertEqual(result["schema_version"], "2")
+        self.assertEqual(result["profile"], "itinerary_summary")
+        self.assertEqual(len(result["results"][0]["legs"]), 2)
+        serialized_result = json.dumps(result, ensure_ascii=False)
+        self.assertNotIn("示例市第", serialized_result)
+        self.assertNotIn("address", serialized_result)
+
+    def test_invalid_itinerary_stops_before_credential_lookup(self) -> None:
+        payload = itinerary_batch(itinerary_request(1))
+        stdout = io.StringIO()
+
+        exit_code = google_routes.run(
+            ["query"],
+            stdin=io.StringIO(json.dumps(payload, ensure_ascii=False)),
+            stdout=stdout,
+            stderr=io.StringIO(),
+            environ={},
+            credential_path=Path("missing-credential.toml"),
+        )
+
+        self.assertEqual(exit_code, 2)
+        error = json.loads(stdout.getvalue())["error"]
+        self.assertEqual(error["code"], "invalid_input")
+        self.assertEqual(error["path"], "$.requests[0].points")
 
     def test_smoke_runner_refuses_without_explicit_opt_in(self) -> None:
         script = ROOT / "skills" / "google-routes" / "scripts" / "smoke_test.py"

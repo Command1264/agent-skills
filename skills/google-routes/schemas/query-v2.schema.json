@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Command1264/agent-skills/google-routes/query-v2.schema.json",
+  "title": "google-routes itinerary query envelope v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile", "requests"],
+  "properties": {
+    "schema_version": {"const": "2"},
+    "profile": {"const": "itinerary_summary"},
+    "rate_limit_qpm": {"type": "integer", "minimum": 1, "maximum": 3000, "default": 60},
+    "requests": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/route_request"}
+    }
+  },
+  "$defs": {
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "address": {"type": "string", "minLength": 1},
+        "place_id": {"type": "string", "minLength": 1}
+      },
+      "oneOf": [
+        {"required": ["address"]},
+        {"required": ["place_id"]}
+      ]
+    },
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "location"],
+      "properties": {
+        "label": {"type": "string", "minLength": 1, "maxLength": 80},
+        "location": {"$ref": "#/$defs/location"}
+      }
+    },
+    "route_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_id", "points", "travel_mode", "departure_time"],
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+        },
+        "points": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 12,
+          "items": {"$ref": "#/$defs/point"}
+        },
+        "travel_mode": {"enum": ["DRIVE", "TWO_WHEELER"]},
+        "departure_time": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}
