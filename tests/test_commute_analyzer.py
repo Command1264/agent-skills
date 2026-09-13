@@ -696,7 +696,7 @@ class RunTests(unittest.TestCase):
             outputs = json.loads(stdout.getvalue())["outputs"]
             expected_data = (
                 home / ".local" / "share" / "command1264-skills" / "commute-analyzer"
-            )
+            ).resolve()
 
             self.assertTrue(Path(outputs["json_report"]).is_relative_to(expected_data))
             self.assertTrue(Path(outputs["markdown_report"]).is_relative_to(expected_data))
