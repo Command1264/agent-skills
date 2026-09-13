@@ -2,6 +2,23 @@
 
 所有值得注意的變更都記錄在此。版本遵循 Semantic Versioning。
 
+## [1.1.0] - 2026-09-13
+
+### Added
+
+- 新增完全離線的 `config path` 與 `config check`，安全顯示路徑解析與設定有效性。
+
+### Changed
+
+- Windows config 改用 `%USERPROFILE%\.config`，reports 與 ledger 改用
+  `%USERPROFILE%\.local\share`，讓 packaged 與 unpackaged runtime 共用同一實體檔案。
+- 新預設 config 不存在時，保留目前 runtime 可見的舊 `%APPDATA%` config fallback，並提示
+  人工遷移；不自動複製或搬移私人資料。
+
+### Fixed
+
+- 修正 Microsoft Store／MSIX Python 因 AppData virtualization 找不到 PowerShell 已建立設定的問題。
+
 ## [1.0.0] - 2026-09-13
 
 ### Added

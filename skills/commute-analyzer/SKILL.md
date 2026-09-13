@@ -12,29 +12,33 @@ request 計數、統計與私人檔案路徑由 script 決定；Agent 不手算�
 ## 執行流程
 
 1. 執行 `python scripts/commute_analyzer.py capabilities`。這個命令完全離線。
-2. 尋找並驗證 `google-routes` v2。搜尋順序與錯誤修復見
+2. 執行 `python scripts/commute_analyzer.py config path`，確認目前 runtime 選用的私人設定路徑。
+   接著執行完全離線的 `config check`；命令只輸出安全 metadata，不顯示地址或公司內容。
+   Windows 若顯示 `legacy_windows_appdata_path`，依
+   [`references/private-data.md`](references/private-data.md) 指引人工遷移；不得自動讀取、複製或搬移。
+3. 尋找並驗證 `google-routes` v2。搜尋順序與錯誤修復見
    [`references/dependency-resolution.md`](references/dependency-resolution.md)。缺少或不相容時停止；
    不要自動安裝、複製實作或繞過 capabilities。
-3. 若私人設定不存在，依 [`schemas/config-v1.schema.json`](schemas/config-v1.schema.json)
-   協助使用者在作業系統的私人 config directory 建立。完整住家與公司位置只放在該檔；
+4. 若私人設定不存在，依 [`schemas/config-v1.schema.json`](schemas/config-v1.schema.json)
+   協助使用者在 `config path` 顯示的 `default_path` 建立。完整住家與公司位置只放在該檔；
    API key 由 `google-routes` 自己的 secret file 管理，不得加入 commute config。
-4. 依 [`schemas/plan-request-v1.schema.json`](schemas/plan-request-v1.schema.json) 建立 plan request。
+5. 依 [`schemas/plan-request-v1.schema.json`](schemas/plan-request-v1.schema.json) 建立 plan request。
    預設為下一個星期一開始的一週、星期一至五、08:00 去程、18:00 回程，並同時取樣
    `TWO_WHEELER` 與 `DRIVE`。使用者可調整一至四週、星期、時間、公司與本機 QPM。
-5. 將 plan request 由 stdin 傳給 `python scripts/commute_analyzer.py plan`。`plan` 只執行
+6. 將 plan request 由 stdin 傳給 `python scripts/commute_analyzer.py plan`。`plan` 只執行
    dependency capabilities 檢查，不會查詢 Routes API。將 stdout plan 視為私人資料保存。
-6. 向使用者顯示 plan 內的 `plan_id`、日期、request 數、最多 HTTP request 數、模式、
+7. 向使用者顯示 plan 內的 `plan_id`、日期、request 數、最多 HTTP request 數、模式、
    預估 SKU request 與本機 QPM。執行前請使用者在 Google Cloud Console 確認目前 Routes API
    quota，並把 `rate_limit_qpm` 設為不高於可用額度；提醒本機 QPM 不是 quota 查詢結果或
    最終帳單估價，`429` 只應是例外復原情境。
-7. request 數大於 20 時，必須取得使用者對同一個完整 `plan_id` 的明確確認；plan 有任何
+8. request 數大於 20 時，必須取得使用者對同一個完整 `plan_id` 的明確確認；plan 有任何
    變更或過期都重新執行 `plan`。20 筆以下仍須先顯示預覽，但不要求額外 token。
-8. 先執行相依 Skill 的 `credentials check`，再把未修改的 plan 傳給 `run`。超過門檻時加上
+9. 先執行相依 Skill 的 `credentials check`，再把未修改的 plan 傳給 `run`。超過門檻時加上
    `--confirm-plan-id <完整 plan_id>`。`commute-analyzer` 不讀取、傳遞或記錄 key。
-9. 檢查 exit code 與 JSON `status`。`TWO_WHEELER` 每個必要樣本都成功才可納入排名；
+10. 檢查 exit code 與 JSON `status`。`TWO_WHEELER` 每個必要樣本都成功才可納入排名；
    `degraded`／fallback 或失敗會排除該公司的機車排名。`DRIVE` 不完整只標示為補充資料不完整，
    不影響機車排名。
-10. 回報 JSON 精確秒數及繁體中文 Markdown 中的平均、中位數、最短、最長、每日來回、
+11. 回報 JSON 精確秒數及繁體中文 Markdown 中的平均、中位數、最短、最長、每日來回、
     每週合計與四週月估算。說明這是未來預測樣本，不是歷史實際通勤紀錄。
 
 完成條件：執行的 plan 與已預覽／確認的 `plan_id` 完全一致；每個樣本都有結果；必要機車
@@ -46,6 +50,8 @@ request 計數、統計與私人檔案路徑由 script 決定；Agent 不手算�
 
 ```powershell
 python scripts/commute_analyzer.py capabilities
+python scripts/commute_analyzer.py config path
+python scripts/commute_analyzer.py config check
 Get-Content plan-request.json | python scripts/commute_analyzer.py plan --config C:\private\config.json > private-plan.json
 Get-Content private-plan.json | python scripts/commute_analyzer.py run
 ```

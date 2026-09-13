@@ -7,6 +7,21 @@ CLI 使用 Python 3.11+、UTF-8 JSON 與 stdin/stdout。stdout 永遠只有一�
 
 完全離線，exit `0`。輸出 Skill／CLI 版本、支援命令、預設值及要求的 `google-routes` 能力。
 
+## `config path`
+
+完全離線，exit `0`。輸出目前選用的 config path、新跨 runtime 預設路徑、來源、是否存在、
+是否需要人工遷移，以及 Windows 舊 AppData 路徑。命令不讀取或回傳設定內容。
+
+解析優先序為 `COMMUTE_ANALYZER_CONFIG`、存在的新預設 config、目前 runtime 可見的舊
+Windows AppData config，最後是尚未建立的新預設路徑。使用 legacy config 時輸出
+`legacy_windows_appdata_path` warning，但不自動搬移檔案。
+
+## `config check`
+
+完全離線。使用與 `config path` 相同的解析規則讀取並嚴格驗證 config；成功 exit `0`，只在
+metadata 增加 `content_schema_version`，不回傳地址、公司或其他私人內容。找不到檔案或內容
+無效時 exit `2` 並輸出結構化錯誤。
+
 ## `plan [--config PATH]`
 
 stdin 是 `plan-request-v1`。未傳 `--config` 時使用預設私人 config path。只會呼叫

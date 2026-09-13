@@ -97,7 +97,7 @@ _避免使用_：成功樣本、完全失敗、忽略 fallback
 _避免使用_：完整地址、Place ID、座標
 
 **API 使用帳本（API Usage Ledger）**：
-存放於私人資料目錄的 append-only JSONL，只記錄執行時間、預計與實際請求數、成功、失敗、重試數、交通模式及推定 SKU 類別。不得記錄地址、API key、路線時間或 Google 原始 response。私人資料目錄在 Windows 為 `%LOCALAPPDATA%\command1264-skills\commute-analyzer`，macOS 為 `~/Library/Application Support/command1264-skills/commute-analyzer`，Linux 為 `${XDG_DATA_HOME:-~/.local/share}/command1264-skills/commute-analyzer`。
+存放於私人資料目錄的 append-only JSONL，只記錄執行時間、預計與實際請求數、成功、失敗、重試數、交通模式及推定 SKU 類別。不得記錄地址、API key、路線時間或 Google 原始 response。私人資料目錄在 Windows 為 `%USERPROFILE%\.local\share\command1264-skills\commute-analyzer`，macOS 為 `~/Library/Application Support/command1264-skills/commute-analyzer`，Linux 為 `${XDG_DATA_HOME:-~/.local/share}/command1264-skills/commute-analyzer`。
 _避免使用_：路線快取、通勤歷史、原始 response log
 
 **通勤報告（Commute Report）**：
@@ -105,8 +105,12 @@ _避免使用_：路線快取、通勤歷史、原始 response log
 _避免使用_：repository 報告、歷史實測、完整地址檔名
 
 **私人通勤設定（Private Commute Configuration）**：
-存放於作業系統標準使用者設定目錄的通勤設定檔。Windows 使用 `%APPDATA%\command1264-skills\commute-analyzer\config.json`，macOS 使用 `~/Library/Application Support/command1264-skills/commute-analyzer/config.json`，Linux 使用 `${XDG_CONFIG_HOME:-~/.config}/command1264-skills/commute-analyzer/config.json`；`COMMUTE_ANALYZER_CONFIG` 可明確覆寫位置。此檔不得包含 API key；Google credential 由 `google-routes` v2 自己的使用者層級 TOML secret file 擁有、解析與使用。公開 repository、輸出與一般 log 均不得包含私人地址或 secret。
+存放於使用者層級私人設定目錄的通勤設定檔。Windows 使用 `%USERPROFILE%\.config\command1264-skills\commute-analyzer\config.json`，避免 packaged Python 與一般程序看到不同的 AppData 實體檔案；macOS 使用 `~/Library/Application Support/command1264-skills/commute-analyzer/config.json`，Linux 使用 `${XDG_CONFIG_HOME:-~/.config}/command1264-skills/commute-analyzer/config.json`。`COMMUTE_ANALYZER_CONFIG` 可明確覆寫位置。此檔不得包含 API key；Google credential 由 `google-routes` v2 自己的使用者層級 TOML secret file 擁有、解析與使用。公開 repository、輸出與一般 log 均不得包含私人地址或 secret。
 _避免使用_：repository 設定、公開範例設定
+
+**跨 runtime 私人儲存（Cross-runtime Private Storage）**：
+需要由 packaged 與 unpackaged runtime 共用的使用者層級 config 或 data。路徑必須由建立端與消費端各自驗證，不能只比較環境變數字串；Windows 預設使用 `%USERPROFILE%\.config` 與 `%USERPROFILE%\.local\share`，避免 MSIX AppData virtualization。舊 AppData config 只有在目前 runtime 可見且新路徑不存在時才作為相容 fallback，並要求人工遷移；程式不得自動搬移私人內容。
+_避免使用_：單一 runtime 路徑驗證、自動 secret 遷移、相同字串即相同檔案
 
 **公司設定（Company Configuration）**：
 私人通勤設定中的可重用目的地，包含穩定 `id`、顯示名稱，以及恰好一種 `address` 或 `place_id`。CLI 也可加入只用於當次計畫的公司，不自動寫回私人設定；未來的公司別早晚時間覆寫不是第一版行為。

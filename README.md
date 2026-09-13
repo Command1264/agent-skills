@@ -12,7 +12,7 @@ Repository foundation、`google-routes` v2 與 `commute-analyzer` v1 穩定版�
 | Skill | 用途 | 狀態 |
 | --- | --- | --- |
 | `google-routes` | 封裝 Google Routes API，輸出穩定 JSON | v2.0.0 |
-| `commute-analyzer` | 以未來工作日樣本估算並比較住家與公司的通勤時間 | v1.0.0 |
+| `commute-analyzer` | 以未來工作日樣本估算並比較住家與公司的通勤時間 | v1.1.0 |
 
 ## 安裝
 
