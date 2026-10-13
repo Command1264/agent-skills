@@ -161,7 +161,7 @@ scripts/                   Repository 驗證工具
 tests/                     不需外部 secret 的測試
 ```
 
-本專案的標準 domain 用語以 [`CONTEXT.md`](CONTEXT.md) 為準。
+本專案的標準 domain 用語以 [`GLOSSARY.md`](GLOSSARY.md) 為準。
 
 ## 語言
 
