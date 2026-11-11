@@ -1,4 +1,5 @@
 """Black-box checks of the standalone worktree command on each CI platform."""
+import json
 import os
 from pathlib import Path
 import shutil
@@ -49,6 +50,18 @@ class ProjectWorktreeTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
         return result.stdout
 
+    def preview(self, cwd):
+        # Serialize the returned object before PowerShell formats it for the terminal.
+        result = subprocess.run(
+            [PWSH, "-NoProfile", "-NonInteractive", "-Command",
+             "$ErrorActionPreference = 'Stop'; "
+             "& $env:WT_TEST_SCRIPT -Type feat -Name sample-task | ConvertTo-Json -Compress"],
+            cwd=cwd, capture_output=True, encoding="utf-8", timeout=30,
+            env={**self.env, "WT_TEST_SCRIPT": str(SCRIPT)},
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
     def snapshot(self, repo):
         return self.git(repo, "show-ref"), self.git(repo, "worktree", "list", "--porcelain", "-z")
 
@@ -60,11 +73,15 @@ class ProjectWorktreeTests(unittest.TestCase):
         nested.mkdir()
         before = self.snapshot(self.repo)
         expected = self.repo.parent / "worktrees" / "feat-sample-task"
+        commit = self.git(self.repo, "rev-parse", "develop").strip()
         for start in (self.repo, nested, linked):
-            output = self.invoke(start)
-            self.assertIn("Preview", output)
-            self.assertIn(str(expected), output)
-            self.assertIn(self.git(self.repo, "rev-parse", "develop").strip(), output)
+            with self.subTest(start=start):
+                output = self.preview(start)
+                self.assertEqual(output["Status"], "Preview")
+                self.assertEqual(output["MainRepository"], str(self.repo))
+                self.assertEqual(output["Worktree"], str(expected))
+                self.assertEqual(output["Branch"], "codex/feat/sample-task")
+                self.assertEqual(output["Commit"], commit)
         self.assertEqual(before, self.snapshot(self.repo))
         self.assertFalse(expected.parent.exists())
 
