@@ -5,13 +5,14 @@
 
 ## 目前狀態
 
-Repository foundation、`google-routes` v2 與 `commute-analyzer` v2 穩定版已發布。
+從 `v1.0.0` 起，Git tag 與 GitHub Release 標題使用整個 Skill 庫的版本，例如 `v1.0.0`。
+下表是各 Skill 自己的版本，詳細變更記在各自的 `CHANGELOG.md`。舊的帶前綴 tag 仍可用於固定安裝。
 已確認但尚未進入實作的 maintainability 與 internationalization 工作記錄於
 [`TODO.md`](TODO.md)。
 
 收錄的 Skills：
 
-| Skill | 用途 | 狀態 |
+| Skill | 用途 | Skill 版本 |
 | --- | --- | --- |
 | `google-routes` | 封裝 Google Routes API，輸出穩定 JSON | v2.1.0 |
 | `commute-analyzer` | 以任意起終點與多站 Journey 估算並比較未來通勤時間 | v2.0.0 |
