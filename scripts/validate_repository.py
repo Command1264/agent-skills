@@ -14,7 +14,7 @@ from urllib.parse import unquote
 AGENTS_MAX_BYTES = 24 * 1024
 REQUIRED_FILES = (
     "AGENTS.md",
-    "CONTEXT.md",
+    "GLOSSARY.md",
     "README.md",
     "CONTRIBUTING.md",
     "SECURITY.md",

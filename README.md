@@ -5,16 +5,18 @@
 
 ## 目前狀態
 
-Repository foundation、`google-routes` v2 與 `commute-analyzer` v2 穩定版已發布。
+從 `v1.0.0` 起，Git tag 與 GitHub Release 標題使用整個 Skill 庫的版本，例如 `v1.0.0`。
+下表是各 Skill 自己的版本，詳細變更記在各自的 `CHANGELOG.md`。舊的帶前綴 tag 仍可用於固定安裝。
 已確認但尚未進入實作的 maintainability 與 internationalization 工作記錄於
 [`TODO.md`](TODO.md)。
 
-規劃中的第一批 Skills：
+收錄的 Skills：
 
-| Skill | 用途 | 狀態 |
+| Skill | 用途 | Skill 版本 |
 | --- | --- | --- |
 | `google-routes` | 封裝 Google Routes API，輸出穩定 JSON | v2.1.0 |
 | `commute-analyzer` | 以任意起終點與多站 Journey 估算並比較未來通勤時間 | v2.0.0 |
+| [`new-project-worktree`](skills/new-project-worktree/SKILL.md) | 預覽或建立專案的本機 Git 工作樹 | v1.0.0 |
 
 ## 安裝
 
@@ -30,8 +32,8 @@ npx skills add Command1264/agent-skills
 該專案會使用 `<專案>/.agents/skills`。重新啟動 Agent 或開啟新工作階段後，即可讓 Agent 發現
 新安裝的 Skills。
 
-這條命令會一併安裝 `google-routes` 與 `commute-analyzer`；日後 repository 新增 Skills 時，
-再次執行同一條命令也會一併安裝。`commute-analyzer` 執行時需要相容的 `google-routes` v2；缺少或版本
+這條命令會一併安裝上表的 Skills。`new-project-worktree` 需要 Git 與 PowerShell 7.2 以上，
+不需要 Google API key。`commute-analyzer` 執行時需要相容的 `google-routes` v2；缺少或版本
 不相容時會停止，不會靜默安裝、降級或複製相依實作。
 
 安裝本身不會呼叫 Google API。只有執行路線 `query` 或已確認的 commute `run` 才可能產生
@@ -161,7 +163,7 @@ scripts/                   Repository 驗證工具
 tests/                     不需外部 secret 的測試
 ```
 
-本專案的標準 domain 用語以 [`CONTEXT.md`](CONTEXT.md) 為準。
+本專案的標準 domain 用語以 [`GLOSSARY.md`](GLOSSARY.md) 為準。
 
 ## 語言
 

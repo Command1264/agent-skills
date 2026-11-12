@@ -17,7 +17,7 @@ Skill changelog 時適用。
 ## Interface 與相依性
 
 - Skill 的 interface 包含輸入、輸出、錯誤模式、設定、順序限制與外部成本；變更前
-  先確認 `CONTEXT.md` 與適用 ADR。
+  先確認 `GLOSSARY.md` 與適用 ADR。
 - 跨 Skill 呼叫使用帶版本的穩定契約，不解析自然語言輸出，也不直接依賴 provider
   的原始 response。
 - `npx skills` 不會自動解決 Skill 相依性。需要其他 Skill 時，執行前驗證其
@@ -30,5 +30,5 @@ Skill changelog 時適用。
 
 - 每個已發布 Skill 維護自己的 `CHANGELOG.md` 與 SemVer。
 - 行為、interface、相依性、外部成本、安全限制或安裝方式改變時，同步更新 Skill
-  文件、examples、tests、`CONTEXT.md` 或 ADR 中真正受影響的部分。
+  文件、examples、tests、`GLOSSARY.md` 或 ADR 中真正受影響的部分。
 - README 只宣稱已由實際驗證支持的 Agent、平台與安裝方式。
