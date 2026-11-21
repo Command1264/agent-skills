@@ -1,6 +1,6 @@
 interface:
   display_name: "Orient Next Step"
-  short_description: "讀取適用規則與專案現況，提出一個有證據、可驗證的具體下一步"
+  short_description: "讀取規則、roadmap 與 ADR 等方向文件及專案現況，提出一個有證據、可驗證的具體下一步"
 
 policy:
   allow_implicit_invocation: true
