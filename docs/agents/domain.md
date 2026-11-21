@@ -6,7 +6,7 @@
 
 文件存在時，讀取：
 
-- Repository root 的 `CONTEXT.md`，了解標準 domain 用語。
+- Repository root 的 `GLOSSARY.md`，了解標準 domain 用語。
 - `docs/adr/` 中與目前工作範圍相關的 ADR，了解既有架構決策。
 
 這些文件不存在並不代表錯誤。只有在術語或符合條件的架構決策實際定案
@@ -16,7 +16,7 @@
 
 ```
 /
-├── CONTEXT.md
+├── GLOSSARY.md
 └── docs/
     └── adr/
         ├── 0001-example-decision.md
@@ -25,11 +25,11 @@
 
 ## Domain 用語
 
-Skill 名稱、文件、測試、Issue 與實作應一致使用 `CONTEXT.md` 定義的
+Skill 名稱、文件、測試、Issue 與實作應一致使用 `GLOSSARY.md` 定義的
 術語。
 
 若需要的概念尚未定義，先判斷它是否確實屬於本專案特有的 domain 概念。
-若是，應先透過 domain modeling 釐清意義，再加入 `CONTEXT.md`。
+若是，應先透過 domain modeling 釐清意義，再加入 `GLOSSARY.md`。
 
 ## 架構決策
 

@@ -2,6 +2,16 @@
 
 本 repository 收錄可公開使用、可重現安裝與驗證的 Agent Skills。個人地址與偏好等私人資料不屬於公開 Skill 內容，應保存在本機私人設定中。
 
+## 版本與發布
+
+**Skill 庫版本（Skill Library Version）**：
+整個 Skill 庫同一次發布的版本，代表一份可固定安裝的 repository 快照。
+_避免使用_：單一 Skill 版本、所有 Skill 的共同版本
+
+**Skill 版本（Skill Version）**：
+單一 Skill 的獨立版本，用來描述該 Skill 的變更與相容性。
+_避免使用_：Skill 庫版本、Git tag 名稱
+
 ## 路線與通勤
 
 **`google-routes`（路線查詢 Skill）**：
@@ -27,10 +37,6 @@ _避免使用_：自動安裝、任意全磁碟搜尋、隱藏相依來源
 **Skill 能力描述（Skill Capabilities）**：
 Skill CLI 透過不呼叫外部服務的 `capabilities` 命令，回報自身 Skill version、CLI contract version、支援的 schema versions、交通模式與 output profiles。上層 Skill 必須先驗證能力相容性，不得只以目錄存在推定可用。
 _避免使用_：安裝狀態、API 可用性、隱含版本相容
-
-**Skill 發布版本（Skill Release Version）**：
-單一 Skill 的獨立 SemVer，記錄於該 Skill 的 `CHANGELOG.md`，並以 `<skill-name>-v<version>` Git tag 發布。Tag 必須指向 `main` 上通過 release gate 的 commit；`develop` 版本只供開發與驗收。
-_避免使用_：repository 共用版本、develop 最新版、未驗收 tag
 
 **預測通勤樣本（Predictive Commute Sample）**：
 針對一組起點、終點、交通模式及未來出發時間取得的一次 Routes API 預測結果。它不是使用者過去實際通勤的紀錄。

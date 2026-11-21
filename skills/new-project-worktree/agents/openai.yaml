@@ -1,0 +1,5 @@
+interface:
+  display_name: "建立專案工作樹"
+  short_description: "辨識 Git 主要 checkout，預覽或建立專案同層的工作樹"
+policy:
+  allow_implicit_invocation: true
