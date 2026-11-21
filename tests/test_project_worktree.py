@@ -80,7 +80,7 @@ class ProjectWorktreeTests(unittest.TestCase):
                 self.assertEqual(output["Status"], "Preview")
                 self.assertEqual(output["MainRepository"], str(self.repo))
                 self.assertEqual(output["Worktree"], str(expected))
-                self.assertEqual(output["Branch"], "codex/feat/sample-task")
+                self.assertEqual(output["Branch"], "agent/feat/sample-task")
                 self.assertEqual(output["Commit"], commit)
         self.assertEqual(before, self.snapshot(self.repo))
         self.assertFalse(expected.parent.exists())
@@ -92,7 +92,7 @@ class ProjectWorktreeTests(unittest.TestCase):
         dirty.write_text("keep", encoding="utf-8")
         self.invoke(second, "sample-task", "-Base", "main", "-Apply")
         expected = second.parent / "worktrees" / "feat-sample-task"
-        self.assertEqual(self.git(expected, "branch", "--show-current").strip(), "codex/feat/sample-task")
+        self.assertEqual(self.git(expected, "branch", "--show-current").strip(), "agent/feat/sample-task")
         self.assertEqual(self.git(expected, "rev-parse", "HEAD"), self.git(second, "rev-parse", "main"))
         self.assertEqual(dirty.read_text(encoding="utf-8"), "keep")
         self.assertFalse((expected / dirty.name).exists())
@@ -102,7 +102,7 @@ class ProjectWorktreeTests(unittest.TestCase):
         worktrees = self.repo.parent / "worktrees"
         worktrees.mkdir()
         (worktrees / "FEAT-OCCUPIED").mkdir()
-        self.git(self.repo, "branch", "codex/feat/duplicate")
+        self.git(self.repo, "branch", "agent/feat/duplicate")
         before = self.snapshot(self.repo)
         self.invoke(self.repo, "duplicate", "-Apply", error="分支名稱已占用")
         self.invoke(self.repo, "occupied", "-Apply", error="目的地已存在")

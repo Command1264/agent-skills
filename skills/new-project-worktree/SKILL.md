@@ -12,7 +12,7 @@ pwsh -NoProfile -File <skill>/scripts/New-ProjectWorktree.ps1 -Type feat -Name e
 ```
 
 1. 依使用者與專案規則選擇基線、任務類型及 kebab-case 名稱。腳本預設使用本機 `develop`。其他專案可傳入自己的本機基線，例如 `-Base main`。
-2. 先執行預覽並核對 `MainRepository`、`Worktree`、`Branch` 和 `Commit`。腳本適用於主 checkout 位於 `repo/` 的布局，工作樹目標是其同層 `worktrees/<type>-<name>`。預覽不建立目錄或分支。
+2. 先執行預覽並核對 `MainRepository`、`Worktree`、`Branch` 和 `Commit`。腳本適用於主 checkout 位於 `repo/` 的布局，工作樹目標是其同層 `worktrees/<type>-<name>`，分支為 `agent/<type>/<name>`。預覽不建立目錄或分支。
 3. 使用者要求實際建立時，用相同參數加上 `-Apply`。成功後回報完整工作樹路徑、分支和起始 commit。當次命令會從它核對的確切 commit 建立。使用者指定固定基線時，套用前核對該分支仍指向預期 commit。
 4. 若 Git 無法辨識專案、目的地不符或已有分支／工作樹，回報衝突。若建立中途失敗，檢查實際工作樹和分支登記，再決定下一步。
 
