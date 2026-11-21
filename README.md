@@ -17,6 +17,7 @@
 | `google-routes` | 封裝 Google Routes API，輸出穩定 JSON | v2.1.0 |
 | `commute-analyzer` | 以任意起終點與多站 Journey 估算並比較未來通勤時間 | v2.0.0 |
 | [`new-project-worktree`](skills/new-project-worktree/SKILL.md) | 預覽或建立專案的本機 Git 工作樹 | v1.1.0 |
+| [`next-step`](skills/next-step/SKILL.md) | 讀取專案規則與現況，建議具體下一步 | v1.0.0 |
 
 ## 安裝
 
