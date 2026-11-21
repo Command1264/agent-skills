@@ -1,5 +1,5 @@
 ---
-name: orient-next-step
+name: next-step
 description: 當新對話缺少專案脈絡、使用者詢問下一步、恢復中斷工作，或執行廣泛需求前需要定位 workspace 時使用。讀取適用的 Agent 規則、roadmap 與 ADR 等方向文件及唯讀現況，提出一個符合專案方向且有依據的具體下一步。已有充分脈絡的明確任務或獨立問題不需要此 Skill。
 ---
 
