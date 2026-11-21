@@ -1,6 +1,8 @@
 # Changelog
 
-## [Unreleased]
+本 Skill 依 [Semantic Versioning](https://semver.org/) 獨立版本化。
+
+## [1.0.0] - 2026-11-22
 
 ### Added
 
@@ -9,4 +11,4 @@
 - 定位分為「拉遠」與「拉近」：先讀 roadmap、計畫、backlog 與 ADR 等方向文件，再核對現況；
   下一步依「收尾進行中工作 → 前置條件已滿足的方向項目 → 阻擋問題」排序，並須同時引用方向與現況證據。
 - 方向文件與 Git 實際狀態不一致時，明確回報方向文件過時。
-- 此版本尚未發布；既有本機 `command1264-orient-next-step` 安裝不會自動改名或移除。
+- 取代作者本機的 `command1264-orient-next-step`；兩者名稱不同，舊名稱的安裝需另行移除。
