@@ -4,6 +4,6 @@
 必須完成對應 GitHub Issue 的驗收後才可從 `main` 發布。`develop` 與 task branch
 可以包含尚待驗收的 Skill。目前 `google-routes` 穩定版為 v2.1.0，
 `commute-analyzer` 為 v2.0.0，[`new-project-worktree`](new-project-worktree/SKILL.md) 為 v1.1.0，
-[`next-step`](next-step/SKILL.md) 為 v1.0.0。[`idea-assessment`](idea-assessment/SKILL.md) 尚待驗收，未發布。
+[`next-step`](next-step/SKILL.md) 為 v1.0.0。[`idea-assessment`](idea-assessment/SKILL.md) 為 v1.0.0。
 
 撰寫規則請見 [`docs/agents/skill-authoring.md`](../docs/agents/skill-authoring.md)。
