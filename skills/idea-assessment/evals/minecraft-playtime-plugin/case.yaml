@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: minecraft-playtime-plugin
+expected_outcome: |
+  報告找到 Plan（Player Analytics）等既有的玩家統計插件，說明使用者「自己用、之後可能開源」的目標如何
+  影響評分與判決，並提出一週內可完成的驗證實驗。

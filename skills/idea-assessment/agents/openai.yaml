@@ -1,0 +1,6 @@
+interface:
+  display_name: "Idea Assessment"
+  short_description: "調查競品、需求、趨勢與 AI 替代風險，依固定面向評分並畫出不推薦到推薦的長條圖，給出判決與驗證實驗"
+
+policy:
+  allow_implicit_invocation: true

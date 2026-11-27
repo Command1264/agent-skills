@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: vscode-commit-translator
+expected_outcome: |
+  建立 ./idea-out 底下的日期資料夾，內含 assessment.json、report.html、report.md 與 chart.svg。
+  報告找到既有的 AI commit message 擴充或 Copilot 內建功能，AI 替代風險評為低分，判決不是「值得做」，
+  並給出具體的驗證實驗與放棄條件。
