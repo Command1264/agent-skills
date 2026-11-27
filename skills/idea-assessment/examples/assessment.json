@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "idea": "社區二手工具租借平台",
+  "date": "2026-11-28",
+  "verdict": "validate-first",
+  "verdict_reason": "需求真實但付費意願未證實，且多個同類平台已收掉 [1]，先用社群表單驗證再寫程式。",
+  "scale_max": 5,
+  "dimensions": [
+    {"key": "pain", "label": "痛點強度", "score": 3, "confidence": "medium", "summary": "偶發需求明確，但多數人能向親友借到"},
+    {"key": "demand", "label": "需求與市場", "score": 2, "confidence": "low", "summary": "缺少本地付費意願的直接證據"},
+    {"key": "competition", "label": "競爭空間", "score": 2, "confidence": "high", "summary": "二手平台與社群社團已部分滿足"},
+    {"key": "ai-resilience", "label": "AI 抗替代性", "score": 4, "confidence": "medium", "summary": "價值在實體信任與交付，通用 AI 難以直接取代"},
+    {"key": "timing", "label": "時機與趨勢", "score": 3, "confidence": "low", "summary": "共享經濟熱度退燒，永續消費議題仍在"},
+    {"key": "feasibility", "label": "實作可行性", "score": 4, "confidence": "high", "summary": "技術成熟，難點在營運而非程式"},
+    {"key": "fit", "label": "個人優勢契合", "score": 2, "confidence": "medium", "summary": "缺少在地營運與物流經驗"},
+    {"key": "risk", "label": "風險可控度", "score": 2, "confidence": "medium", "summary": "物品損壞、押金與保險責任需要法律確認"},
+    {"key": "sustainability", "label": "可持續性", "score": 2, "confidence": "low", "summary": "抽成模式在低單價物品上難以支撐營運"}
+  ],
+  "context": [
+    {"label": "目標使用者", "value": "同一社區、偶爾需要電鑽或梯子的住戶", "assumed": false},
+    {"label": "想要的成果", "value": "副業收入", "assumed": true},
+    {"label": "可投入資源", "value": "每週約 10 小時、預算近乎零", "assumed": true}
+  ],
+  "competitors": [
+    {"name": "範例租借平台 A", "url": "https://example.com/rental-a", "kind": "closed", "status": "shut-down", "price": "抽成 15%", "difference": "全國性物品租借", "complaints": "物品少、取件距離遠 [1]"},
+    {"name": "範例開源借物系統", "url": "https://example.org/library-of-things", "kind": "open", "status": "stale", "price": "免費", "difference": "給社區圖書館自架", "complaints": "需要自己架站維護 [2]"},
+    {"name": "社區通訊群組", "kind": "workaround", "status": "active", "price": "免費", "difference": "直接在群組問誰有工具", "complaints": "訊息容易被洗掉、沒有押金機制"}
+  ],
+  "demand": ["社區論壇有零星「誰可以借我工具」的貼文，但沒有人提到願意付費 [2]。"],
+  "trends": ["共享經濟平台近年多數轉型或收掉 [1]；永續消費仍是政策重點，但未直接帶動租借需求（推論）。"],
+  "ai_risk": {
+    "general_agent": "不能。AI 可以媒合需求，但無法替代實體交付與信任。",
+    "platform": "低。大型平台缺少在地物流誘因。",
+    "value": "拿掉模型後仍有社區信任與實體網路，屬於不易被替代的類型。"
+  },
+  "considerations": [
+    {"topic": "授權與著作權", "note": "不適用"},
+    {"topic": "法規與責任", "note": "物品損壞與人身傷害的責任歸屬需要諮詢"}
+  ],
+  "experiment": {
+    "hypothesis": "社區住戶願意付小額租金借用工具",
+    "method": ["在社區群組貼出三種工具的租借表單", "記錄一週內的詢問與預約數"],
+    "duration": "一週",
+    "cost": "零元",
+    "success": "至少 5 筆預約，其中 2 筆願意付費",
+    "failure": "少於 2 筆詢問"
+  },
+  "kill_criteria": ["一週內少於 2 筆詢問", "法律諮詢確認責任無法以押金與條款處理"],
+  "research_gaps": [{"category": "趨勢", "reason": "搜尋工具未回傳 Google Trends 頁面"}],
+  "sources": [
+    {"id": 1, "title": "範例平台關站公告", "url": "https://example.com/rental-a/closing", "accessed": "2026-11-28"},
+    {"id": 2, "title": "範例社區論壇討論串", "url": "https://example.org/forum/tool-sharing", "accessed": "2026-11-28"}
+  ]
+}

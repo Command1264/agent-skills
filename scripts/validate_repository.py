@@ -91,6 +91,10 @@ SCHEMA_EXAMPLE_PAIRS: tuple[SchemaExamplePair, ...] = (
         "skills/commute-analyzer/schemas/result-v2.schema.json",
         "skills/commute-analyzer/examples/result-v2.json",
     ),
+    (
+        "skills/idea-assessment/schemas/assessment-v1.schema.json",
+        "skills/idea-assessment/examples/assessment.json",
+    ),
 )
 
 
